@@ -60,7 +60,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# قاعدة بيانات المدرسين (تحتوي على بيانات المدرس وحصصه الخاصة به)
+# التهيئة الآمنة لقاعدة البيانات
 if "teachers" not in st.session_state:
     st.session_state.teachers = {}
 
@@ -81,6 +81,22 @@ st.title("🎓 منصة نوفا التعليمية المتطورة")
 st.markdown("##### *بوابة التعليم العصرية، البث المباشر والذكاء الاصطناعي*")
 st.markdown("---")
 
+# ================= القائمة الجانبية (زر تسجيل الخروج الثامن) =================
+with st.sidebar:
+    st.markdown("### 📌 لوحة التحكم والتحكم السريع")
+    if st.session_state.logged_in:
+        st.write(f"👤 المستخدم: **{st.session_state.current_user}**")
+        st.write(f"🔹 الهوية: **{st.session_state.user_role}**")
+        st.markdown("---")
+        if st.button("🚪 تسجيل الخروج"):
+            st.session_state.logged_in = False
+            st.session_state.user_role = ""
+            st.session_state.current_user = ""
+            st.success("تم تسجيل الخروج بنجاح!")
+            st.rerun()
+    else:
+        st.info("قم بتسجيل الدخول للبدء.")
+
 # ================= شاشة تسجيل الدخول المرة الواحدة =================
 if not st.session_state.logged_in:
     st.markdown("### 🔐 بوابة الدخول الموحدة")
@@ -99,12 +115,10 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.user_role = "teacher"
                     st.session_state.current_user = teacher_email
-                    # إنشاء بروفایل فارغ للمدرس لو مش موجود
                     if teacher_email not in st.session_state.teachers:
                         st.session_state.teachers[teacher_email] = {
                             "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, 
-                            "image": "https://images.unsplash.com/photo-1544717305-2782549b5136?w=400",
-                            "lessons": []
+                            "image": "", "lessons": []
                         }
                     st.success("تم تسجيل الدخول بنجاح! مرحباً بك يا استاذنا.")
                     st.rerun()
@@ -120,7 +134,7 @@ if not st.session_state.logged_in:
         if st.button("🚀 دخول الطالب"):
             if student_email.strip() and student_pass.strip():
                 if student_email in st.session_state.students_db and st.session_state.students_db[student_email].get("banned", False):
-                    st.error("🚫 عذراً، حسابك محظور بسبب مخالفة قواعد التعليقات والمراقبة. تواصل مع المطور لفك الحظر عبر: 01213783090")
+                    st.error("🚫 عذراً، حسابك محظور. تواصل مع المطور عبر: 01213783090")
                 else:
                     st.session_state.logged_in = True
                     st.session_state.user_role = "student"
@@ -156,28 +170,27 @@ elif st.session_state.user_role == "developer":
         else:
             st.warning("الإيميل غير مسجل.")
 
-    st.markdown("---")
-    if st.button("تسجيل الخروج"):
-        st.session_state.logged_in = False
-        st.session_state.user_role = ""
-        st.rerun()
-
-# ================= واجهة المعلم (يكتب بياناته ويضيف حصصه بنفسه) =================
+# ================= واجهة المعلم =================
 elif st.session_state.user_role == "teacher":
     t_email = st.session_state.current_user
+    if t_email not in st.session_state.teachers:
+        st.session_state.teachers[t_email] = {
+            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, "image": "", "lessons": []
+        }
     t_data = st.session_state.teachers[t_email]
     
     st.success(f"مرحباً بك يا استاذنا الفاضل في لوحة التحكم الخاصة بك! 👨‍🏫 ({t_email})")
     
-    st.markdown("### 📋 اكتب بياناتك الشخصية واسمك ومادتك بنفسك:")
-    t_name = st.text_input("اكتب اسمك الكامل أو لقبك:", value=t_data["name"])
-    t_subject = st.text_input("مادتك الدراسية:", value=t_data["subject"])
-    t_age = st.number_input("سنك:", min_value=20, max_value=80, value=t_data["age"])
+    st.markdown("### 📋 اكتب بياناتك الشخصية واسمك ومادتك وصورتك بنفسك:")
+    t_name = st.text_input("اكتب اسمك الكامل أو لقبك:", value=t_data.get("name", ""))
+    t_subject = st.text_input("مادتك الدراسية:", value=t_data.get("subject", ""))
+    t_age = st.number_input("سنك:", min_value=20, max_value=80, value=t_data.get("age", 25))
     stages_list = ["ابتدائي", "إعدادي", "ثانوي", "جميع المراحل"]
-    default_stage_idx = stages_list.index(t_data["stage"]) if t_data["stage"] in stages_list else 0
+    saved_stage = t_data.get("stage", "ثانوي")
+    default_stage_idx = stages_list.index(saved_stage) if saved_stage in stages_list else 0
     t_stage = st.selectbox("المرحلة الدراسية التي تدرس لها:", stages_list, index=default_stage_idx)
-    t_price = st.number_input("مصاريف الاشتراك الشهري (جنيه):", value=t_data["price"])
-    t_image = st.text_input("رابط صورتك الشخصية (URL):", value=t_data["image"])
+    t_price = st.number_input("مصاريف الاشتراك الشهري (جنيه):", value=t_data.get("price", 50))
+    t_image = st.text_input("رابط صورتك الشخصية (صورة URL):", value=t_data.get("image", ""))
     
     if st.button("حفظ ونشر بياناتي للطلاب"):
         if t_name.strip() and t_subject.strip():
@@ -214,12 +227,6 @@ elif st.session_state.user_role == "teacher":
     if st.button("📡 بدء/تحديث البث المباشر للطلاب"):
         st.session_state.live_stream_link = new_live_link
         st.success("✅ تم بدء البث المباشر بنجاح!")
-
-    st.markdown("---")
-    if st.button("تسجيل الخروج"):
-        st.session_state.logged_in = False
-        st.session_state.user_role = ""
-        st.rerun()
 
 # ================= واجهة الطالب =================
 elif st.session_state.user_role == "student":
@@ -277,30 +284,36 @@ elif st.session_state.user_role == "student":
     st.markdown("---")
     st.markdown("## 👨‍🏫 المدرسون المتاحون في المنصة (اضغط على المدرس لعرض تفاصيله وحصصه):")
     
-    active_teachers = {k: v for k, v in st.session_state.teachers.items() if v["name"].strip() != ""}
+    active_teachers = {}
+    for k, v in st.session_state.teachers.items():
+        if isinstance(v, dict) and v.get("name", "").strip() != "":
+            active_teachers[k] = v
     
     if not active_teachers:
         st.info("📌 لا يوجد مدرسون نشروا بياناتهم حتى الآن. انتظر قليلاً لحين تسجيل المعلمين.")
     else:
         for t_email_key, t_info in active_teachers.items():
-            t_display_name = t_info['name']
+            t_display_name = t_info.get('name', 'معلم')
+            t_img_url = t_info.get('image', '').strip()
+            if not t_img_url:
+                t_img_url = "https://images.unsplash.com/photo-1544717305-2782549b5136?w=400"
             
             col_img, col_info = st.columns([1, 2])
             with col_img:
-                st.image(t_info['image'], caption=f"الأستاذ(ة): {t_display_name}", width=150)
+                st.image(t_img_url, caption=f"الأستاذ(ة): {t_display_name}", width=150)
             with col_info:
                 st.markdown(f"""
                     <div class="card-box" style="margin-bottom:0px;">
                         <h3>📚 الأستاذ(ة): {t_display_name}</h3>
-                        <p><b>المادة:</b> {t_info['subject']}</p>
-                        <p><b>المرحلة:</b> {t_info['stage']} | <b>السن:</b> {t_info['age']} سنة</p>
-                        <p><b>مصاريف الاشتراك الشهري:</b> {t_info['price']} جنيه فقط</p>
+                        <p><b>المادة:</b> {t_info.get('subject', 'غير محدد')}</p>
+                        <p><b>المرحلة:</b> {t_info.get('stage', 'ثانوي')} | <b>السن:</b> {t_info.get('age', 25)} سنة</p>
+                        <p><b>مصاريف الاشتراك الشهري:</b> {t_info.get('price', 50)} جنيه فقط</p>
                     </div>
                 """, unsafe_allow_html=True)
             
             # قسم الاشتراك وعرض الحصص الخاصة بهذا المدرس فوراً عند الضغط
             with st.expander(f"💳 تفاصيل الاشتراك وعرض حصص الأستاذ(ة) {t_display_name}"):
-                st.write(f"• الاشتراك الشهري مع **{t_display_name}**: **{t_info['price']} جنيه مصري فقط** لمدة شهر كامل.")
+                st.write(f"• الاشتراك الشهري مع **{t_display_name}**: **{t_info.get('price', 50)} جنيه مصري فقط** لمدة شهر كامل.")
                 st.write("• طريقة الدفع: تحويل عبر محفظة **أورنج كاش** على الرقم المخصص: `01213783090`")
                 
                 pay_phone = st.text_input(f"أدخل رقم هاتفك المحول منه لتفعيل اشتراك {t_display_name}:", key=f"p_{t_email_key}")
@@ -316,18 +329,13 @@ elif st.session_state.user_role == "student":
                 st.markdown("---")
                 st.markdown(f"### 🎬 حصص الأستاذ(ة) {t_display_name}:")
                 
-                if not t_info["lessons"]:
-                    st.warning("⚠️ لا يوجد حصص لحد الآن.")
+                lessons_list = t_info.get("lessons", [])
+                if not lessons_list:
+                    st.warning("⚠️ لا يوجد حصص لحد الآن مع هذا المدرس.")
                 else:
-                    for l_idx, lesson in enumerate(t_info["lessons"], 1):
-                        st.markdown(f"🟢 **{l_idx}. {lesson['title']}**")
+                    for l_idx, lesson in enumerate(lessons_list, 1):
+                        st.markdown(f"🟢 **{l_idx}. {lesson.get('title', 'حصة')}**")
                         if is_subscribed and sub_data.get("subscribed_teacher") == t_display_name:
-                            st.video(lesson['link'])
+                            st.video(lesson.get('link', ''))
                         else:
                             st.info("🔒 هذه الحصة تتطلب الاشتراك مع هذا المدرس لمشاهدتها.")
-
-    st.markdown("---")
-    if st.button("تسجيل الخروج"):
-        st.session_state.logged_in = False
-        st.session_state.user_role = ""
-        st.rerun()
