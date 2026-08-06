@@ -2,8 +2,13 @@ import streamlit as st
 import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
+# إعدادات خوادم ربط إضافية ومستقرة للبث الحي
 RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
+    {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.services.mozilla.com"]}
+        ]
+    }
 )
 
 st.set_page_config(
@@ -246,7 +251,10 @@ elif st.session_state.user_role == "teacher":
         key=f"teacher_live_{t_email}",
         mode=WebRtcMode.SENDONLY,
         rtc_configuration=RTC_CONFIGURATION,
-        media_stream_constraints={"video": True, "audio": True},
+        media_stream_constraints={
+            "video": {"width": {"ideal": 640}, "height": {"ideal": 480}},
+            "audio": True
+        },
         async_processing=True,
     )
     
