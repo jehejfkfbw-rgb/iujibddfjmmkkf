@@ -2,12 +2,10 @@ import streamlit as st
 import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
-# إعدادات خوادم الربط السريع لتثبيت البث الحي
 RTC_CONFIGURATION = RTCConfiguration(
     {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
 )
 
-# إعدادات صفحة المنصة والشكل الجمالي
 st.set_page_config(
     page_title="منصة نوفا التعليمية الذكية",
     page_icon="🎓",
@@ -15,58 +13,70 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تصميم وتنسيق CSS عصري وملون للواجهة
 st.markdown("""
     <style>
-    .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Cairo', sans-serif;
     }
+    
+    .stApp {
+        background: #0f172a;
+        color: #f1f5f9;
+    }
+    
+    .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .ai-box {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        color: #e0e7ff;
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        margin-bottom: 20px;
+    }
+    
+    .live-box {
+        background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+        color: #fee2e2;
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        margin-bottom: 20px;
+    }
+    
     .stButton>button {
-        background: linear-gradient(45deg, #FF416C, #FF4B2B);
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         color: white;
         font-weight: bold;
         border-radius: 12px;
         border: none;
         padding: 10px 24px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         transition: 0.3s;
+        width: 100%;
     }
+    
     .stButton>button:hover {
-        background: linear-gradient(45deg, #FF4B2B, #FF416C);
-        box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
         transform: translateY(-2px);
     }
-    .card-box {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-        border-right: 5px solid #FF416C;
-    }
-    .ai-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-    .live-box {
-        background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
+    
     h1, h2, h3 {
-        color: #1E3C72;
+        color: #60a5fa !important;
+        text-align: center;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# التهيئة الآمنة لقاعدة البيانات وحفظ البيانات حتى بعد تسجيل الخروج
 if "teachers" not in st.session_state:
     st.session_state.teachers = {}
 
@@ -80,11 +90,10 @@ if "user_role" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
-st.title("🎓 منصة نوفا التعليمية المتطورة")
-st.markdown("##### *بوابة التعليم العصرية، البث الحي المباشر والذكاء الاصطناعي*")
+st.title("🎓 منصة نوفا التعليمية الذكية")
+st.markdown("<p style='text-align: center; color: #94a3b8;'>بوابة التعليم العصرية، البث الحي المباشر والذكاء الاصطناعي</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ================= القائمة الجانبية (تسجيل الخروج متاح دائماً) =================
 with st.sidebar:
     st.markdown("### 📌 إعدادات الحساب")
     if st.session_state.logged_in:
@@ -95,12 +104,11 @@ with st.sidebar:
             st.session_state.logged_in = False
             st.session_state.user_role = ""
             st.session_state.current_user = ""
-            st.success("تم تسجيل الخروج بنجاح! بيانات المعلمين والحصص محفوظة.")
+            st.success("تم تسجيل الخروج بنجاح!")
             st.rerun()
     else:
         st.info("قم بتسجيل الدخول للبدء.")
 
-# ================= شاشة تسجيل الدخول المرة الواحدة =================
 if not st.session_state.logged_in:
     st.markdown("### 🔐 بوابة الدخول الموحدة")
     
@@ -148,16 +156,16 @@ if not st.session_state.logged_in:
                 
     elif role_choice == "المطور التنفيذي":
         dev_email = st.text_input("إيميل المطور:", key="dev_inp")
+        dev_pass = st.text_input("كلمة مرور المطور:", type="password", key="dev_pass_inp")
         if st.button("دخول المطور"):
-            if dev_email == "jehejfkfbw@gmail.com":
+            if dev_email == "jehejfkfbw@gmail.com" and dev_pass == "DDEE4DAB":
                 st.session_state.logged_in = True
                 st.session_state.user_role = "developer"
                 st.session_state.current_user = dev_email
                 st.rerun()
             else:
-                st.error("إيميل المطور غير صحيح.")
+                st.error("بيانات دخول المطور غير صحيحة.")
 
-# ================= واجهة المطور التنفيذي =================
 elif st.session_state.user_role == "developer":
     st.success("✨ مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا 🌟💼")
     st.info("🛡️ لوحة المراقبة الحية على مدار 24 ساعة للطلاب والمعلمين.")
@@ -171,7 +179,6 @@ elif st.session_state.user_role == "developer":
         else:
             st.warning("الإيميل غير مسجل.")
 
-# ================= واجهة المعلم =================
 elif st.session_state.user_role == "teacher":
     t_email = st.session_state.current_user
     if t_email not in st.session_state.teachers:
@@ -192,7 +199,6 @@ elif st.session_state.user_role == "teacher":
     t_stage = st.selectbox("المرحلة الدراسية التي تدرس لها:", stages_list, index=default_stage_idx)
     t_price = st.number_input("مصاريف الاشتراك الشهري (جنيه):", value=t_data.get("price", 50))
     
-    # اختيار ورفع الصورة الشخصية للمعلم من ملفات الجهاز أو الكاميرا
     uploaded_image = st.file_uploader("اختر صورتك الشخصية من صور جهازك:", type=["jpg", "jpeg", "png"])
     if uploaded_image is not None:
         t_image = uploaded_image
@@ -250,7 +256,6 @@ elif st.session_state.user_role == "teacher":
     else:
         st.session_state.teachers[t_email]["is_live"] = False
 
-# ================= واجهة الطالب =================
 elif st.session_state.user_role == "student":
     student_email = st.session_state.current_user
     
@@ -268,7 +273,6 @@ elif st.session_state.user_role == "student":
     else:
         st.warning("⚡ ملاحظة: اختر المدرس المناسب لك، وتفقد حصصه واشترك معه!")
 
-    # قسم البث الحي المباشر للمدرس المشترك معه الطالب
     if is_subscribed:
         teacher_key_found = None
         for tk, tv in st.session_state.teachers.items():
@@ -292,7 +296,6 @@ elif st.session_state.user_role == "student":
 
     st.markdown("---")
     
-    # قسم فيديوهات الذكاء الاصطناعي
     st.markdown("""
         <div class="ai-box">
             <h3>🤖 قسم فيديوهات الذكاء الاصطناعي في التعليم</h3>
@@ -331,7 +334,7 @@ elif st.session_state.user_role == "student":
                     st.image("https://images.unsplash.com/photo-1544717305-2782549b5136?w=400", caption=f"الأستاذ(ة): {t_display_name}", width=130)
             with col_info:
                 st.markdown(f"""
-                    <div class="card-box" style="margin-bottom:0px;">
+                    <div class="glass-card" style="margin-bottom:0px;">
                         <h3>📚 الأستاذ(ة): {t_display_name}</h3>
                         <p><b>المادة:</b> {t_info.get('subject', 'غير محدد')}</p>
                         <p><b>المرحلة:</b> {t_info.get('stage', 'ثانوي')} | <b>السن:</b> {t_info.get('age', 25)} سنة</p>
