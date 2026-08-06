@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 # إعدادات صفحة المنصة والشكل الجمالي
 st.set_page_config(
@@ -75,7 +76,7 @@ if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
 st.title("🎓 منصة نوفا التعليمية المتطورة")
-st.markdown("##### *بوابة التعليم العصرية، البث المباشر بالكاميرا والذكاء الاصطناعي*")
+st.markdown("##### *بوابة التعليم العصرية، البث الحي المباشر والذكاء الاصطناعي*")
 st.markdown("---")
 
 # ================= القائمة الجانبية (تسجيل الخروج متاح دائماً) =================
@@ -220,16 +221,19 @@ elif st.session_state.user_role == "teacher":
             st.write(f"{idx}. {les['title']}")
 
     st.markdown("---")
-    st.markdown("### 🔴 فتح كاميرا البث المباشر الحي من التطبيق:")
-    st.info("اضغط على زر تشغيل الكاميرا أدناه لتظهر صورتك الحية مباشرة للطلاب المشتركين معك:")
+    st.markdown("### 🔴 غرفة البث الحي المباشر (WebRTC):")
+    st.info("اضغط على زر (START) أدناه لبدء بثك المباشر الحي من الكاميرا ومشاركتها مع طلابك فوراً:")
     
-    # التقاط الفيديو المباشر من كاميرا المعلم مباشرة
-    camera_feed = st.camera_input("تشغيل كاميرا البث المباشر:")
+    # تشغيل البث الحي الحقيقي بالكاميرا للمدرس
+    webrtc_ctx = webrtc_streamer(
+        key=f"teacher_live_{t_email}",
+        mode=WebRtcMode.SENDONLY,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    )
     
-    if camera_feed is not None:
+    if webrtc_ctx.state.playing:
         st.session_state.teachers[t_email]["is_live"] = True
-        st.session_state.teachers[t_email]["live_image"] = camera_feed
-        st.success("🟢 البث المباشر يعمل الآن من الكاميرا ومتاح لطلابك المشتركين!")
+        st.success("🟢 البث الحي يعمل الآن على الهواء مباشرة!")
     else:
         st.session_state.teachers[t_email]["is_live"] = False
 
@@ -251,7 +255,7 @@ elif st.session_state.user_role == "student":
     else:
         st.warning("⚡ ملاحظة: اختر المدرس المناسب لك، وتفقد حصصه واشترك معه!")
 
-    # قسم البث المباشر بالكاميرا للمدرس المشترك معه الطالب
+    # قسم البث الحي المباشر للمدرس المشترك معه الطالب
     if is_subscribed:
         teacher_key_found = None
         for tk, tv in st.session_state.teachers.items():
@@ -262,11 +266,16 @@ elif st.session_state.user_role == "student":
         if teacher_key_found and st.session_state.teachers[teacher_key_found].get("is_live", False):
             st.markdown(f"""
                 <div class="live-box">
-                    <h2>🔴 بث مباشر بالكاميرا الآن مع أستاذك: {subbed_t}</h2>
-                    <p>أستاذك يظهر معك الآن في بث حي مباشر من الكاميرا!</p>
+                    <h2>🔴 بث مباشر حي الآن مع أستاذك: {subbed_t}</h2>
+                    <p>أستاذك يبث الآن مباشرة من الكاميرا!</p>
                 </div>
             """, unsafe_allow_html=True)
-            st.image(st.session_state.teachers[teacher_key_found]["live_image"], caption=f"بث حي مباشر من الأستاذ {subbed_t}", use_column_width=True)
+            # استقبال وعرض البث المباشر الحي للطالب
+            webrtc_streamer(
+                key=f"student_live_{teacher_key_found}",
+                mode=WebRtcMode.RECVONLY,
+                rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            )
             st.warning("⚠️ تنبيه مراقبة صارم: يتم مراقبة الشات والتعليقات على مدار 24 ساعة.")
 
     st.markdown("---")
@@ -336,9 +345,13 @@ elif st.session_state.user_role == "student":
                 if is_subscribed and sub_data.get("subscribed_teacher") == t_display_name:
                     if t_info.get("is_live", False):
                         st.markdown(f"### 🔴 البث الحي المباشر للأستاذ {t_display_name}:")
-                        st.image(t_info.get("live_image"), use_column_width=True)
+                        webrtc_streamer(
+                            key=f"student_view_{t_email_key}",
+                            mode=WebRtcMode.RECVONLY,
+                            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                        )
                     else:
-                        st.info("⏳ الأستاذ لم يفتح الكاميرا لبث مباشر في الوقت الحالي.")
+                        st.info("⏳ الأستاذ لم يبدأ البث الحي بالكاميرا حتى الآن.")
                 
                 st.markdown(f"### 🎬 حصص الأستاذ(ة) {t_display_name}:")
                 lessons_list = t_info.get("lessons", [])
