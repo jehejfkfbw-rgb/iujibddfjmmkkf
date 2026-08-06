@@ -2,8 +2,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sqlite3
 
-# ==================== 1. إعداد قاعدة البيانات الجديدة (SQLite) ====================
-DB_NAME = 'nova_v2.db'  # تغيير الاسم يجبر السيرفر يكريه داتا بيز جديدة بالنظام الجديد
+# ==================== 1. إعداد قاعدة البيانات (SQLite) ====================
+DB_NAME = 'nova_v4.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -19,13 +19,16 @@ def init_db():
         )
     ''')
     
-    # جدول المدرسين والغرف
+    # جدول المدرسين التفيصلي
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE,
             name TEXT,
             subject TEXT,
+            age INTEGER,
             price REAL,
+            photo_url TEXT,
             room_name TEXT
         )
     ''')
@@ -41,7 +44,7 @@ def init_db():
         )
     ''')
 
-    # حساب المطور التنفيذي الافتراضي
+    # حساب المطور التنفيذي
     cursor.execute("SELECT * FROM users WHERE role = 'المطور التنفيذي 👑'")
     if not cursor.fetchone():
         cursor.execute("INSERT INTO users (email, password, role) VALUES ('admin@nova.com', '20101999', 'المطور التنفيذي 👑')")
@@ -51,7 +54,7 @@ def init_db():
 
 init_db()
 
-# ==================== 2. إعدادات الصفحة والتصميم ====================
+# ==================== 2. التصميم وإعدادات الصفحة ====================
 st.set_page_config(
     page_title="منصة نوفا التعليمية",
     page_icon="🌟",
@@ -65,14 +68,17 @@ st.markdown("""
         background: linear-gradient(145deg, #1e293b, #0f172a);
         border: 1px solid #334155;
         border-radius: 16px;
-        padding: 24px;
+        padding: 20px;
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }
-    .card-icon { font-size: 42px; margin-bottom: 10px; }
-    .card-title { font-size: 20px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; }
-    .card-desc { color: #94a3b8; font-size: 13px; }
-    .teacher-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+    .teacher-card {
+        background-color: #1e293b;
+        border: 2px solid #3b82f6;
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,32 +91,31 @@ if "user_email" not in st.session_state:
     st.session_state.user_email = ""
 
 st.title("🌟 منصة نوفا التعليمية")
-st.caption("المنصة المترابطة للتعليم الإلكتروني - البث المباشر والحصص المسجلة")
+st.caption("منصة البث المباشر والحصص التفاعلية الداخلي بالكامل")
 st.write("---")
 
-# ==================== 4. شاشة تسجيل الدخول ====================
+# ==================== 4. شاشة اختيار الحساب والدخول ====================
 if not st.session_state.is_logged_in:
     st.write("### ⚙️ اختر نوع الحساب للبدء:")
     
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown('<div class="card-box"><div class="card-icon">👨‍🎓</div><div class="card-title">حساب طالب</div><div class="card-desc">حضور البث المباشر والمواد مجاناً</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👨‍🎓</h2><h3>طالب</h3><p>تصفح الأساتذة والبث المباشر الداخلي</p></div>', unsafe_allow_html=True)
     with c2:
-        st.markdown('<div class="card-box"><div class="card-icon">👨‍🏫</div><div class="card-title">حساب أستاذ</div><div class="card-desc">إدارة استوديو البث الحي والجداول</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👨‍🏫</h2><h3>أستاذ</h3><p>إدارة البيانات والاستوديو</p></div>', unsafe_allow_html=True)
     with c3:
-        st.markdown('<div class="card-box"><div class="card-icon">👑</div><div class="card-title">المطور التنفيذي</div><div class="card-desc">إدارة قاعدة البيانات الشاملة</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👑</h2><h3>المطور</h3><p>لوحة الإدارة والبيانات</p></div>', unsafe_allow_html=True)
 
-    selected_role = st.radio("تأكيد صفة الدخول:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"], horizontal=True)
+    selected_role = st.radio("تأكيد الصفة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"], horizontal=True)
     st.write("---")
 
+    # دخول الطالب
     if selected_role == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 دخول / تسجيل الطالب")
-        with st.form("student_login_form"):
+        st.subheader("👨‍🎓 دخول الطالب")
+        with st.form("student_form"):
             s_email = st.text_input("البريد الإلكتروني:")
             s_pass = st.text_input("كلمة السر:", type="password")
-            s_btn = st.form_submit_button("تسجيل الدخول", use_container_width=True)
-            
-            if s_btn:
+            if st.form_submit_button("تسجيل الدخول", use_container_width=True):
                 if s_email and s_pass:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
@@ -124,27 +129,23 @@ if not st.session_state.is_logged_in:
                     st.session_state.is_logged_in = True
                     st.session_state.user_role = "طالب 👨‍🎓"
                     st.session_state.user_email = s_email
-                    st.success("تم الدخول بنجاح!")
                     st.rerun()
-                else:
-                    st.error("يرجى إدخال البريد الإلكتروني وكلمة السر!")
 
+    # دخول الأستاذ
     elif selected_role == "أستاذ 👨‍🏫":
         st.subheader("👨‍🏫 دخول الأستاذ")
-        with st.form("teacher_login_form"):
+        with st.form("teacher_form"):
             t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
             t_email = st.text_input("البريد الإلكتروني:")
             t_pass = st.text_input("كلمة السر:", type="password")
-            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ", use_container_width=True)
-            
-            if login_btn:
+            if st.form_submit_button("دخول الأستاذ", use_container_width=True):
                 if t_secret.strip() == "90100" and t_email and t_pass:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     try:
                         c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, ?)", (t_email, t_pass, "أستاذ 👨‍🏫"))
-                        c.execute("INSERT INTO teachers (name, subject, price, room_name) VALUES (?, ?, ?, ?)", 
-                                  (t_email.split('@')[0], "مادة عامة", 0.0, f"nova_room_{t_email.split('@')[0]}"))
+                        c.execute("INSERT INTO teachers (email, name, subject, age, price, photo_url, room_name) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                                  (t_email, t_email.split('@')[0], "لم تحدد", 30, 0.0, "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", f"novalive_{t_email.split('@')[0]}"))
                         conn.commit()
                     except sqlite3.IntegrityError:
                         pass
@@ -153,133 +154,158 @@ if not st.session_state.is_logged_in:
                     st.session_state.is_logged_in = True
                     st.session_state.user_role = "أستاذ 👨‍🏫"
                     st.session_state.user_email = t_email
-                    st.success("تم تسجيل الدخول بنجاح!")
                     st.rerun()
                 else:
                     st.error("كود السر أو البيانات غير صحيحة!")
 
+    # دخول المطور
     elif selected_role == "المطور التنفيذي 👑":
-        st.subheader("👑 لوحة تحكم المطور التنفيذي")
-        secret_code = st.text_input("أدخل الرقم السري للمطور التنفيذي:", type="password")
+        secret_code = st.text_input("الرقم السري للمطور:", type="password")
         if st.button("دخول لوحة التحكم", use_container_width=True):
             if secret_code.strip() == "20101999":
                 st.session_state.is_logged_in = True
                 st.session_state.user_role = "المطور التنفيذي 👑"
                 st.session_state.user_email = "admin@nova.com"
-                st.success("تم التحقق بنجاح!")
                 st.rerun()
-            else:
-                st.error("الرقم السري غير صحيح!")
 
-# ==================== 5. المحتوى الداخلي ====================
+# ==================== 5. الواجهات الداخلية ====================
 else:
-    top_col1, top_col2 = st.columns([3, 1])
-    with top_col1:
-        st.info(f"مرحباً بك! نوع الحساب: **{st.session_state.user_role}** | البريد: ({st.session_state.user_email})")
-    with top_col2:
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
-            st.session_state.is_logged_in = False
-            st.session_state.user_role = None
-            st.session_state.user_email = ""
-            st.rerun()
+    top_col, logout_col = st.columns([3, 1])
+    top_col.info(f"مرحباً: **{st.session_state.user_role}** ({st.session_state.user_email})")
+    if logout_col.button("🚪 تسجيل الخروج", use_container_width=True):
+        st.session_state.is_logged_in = False
+        st.rerun()
 
+    # ---------------- A. واجهة الطالب ----------------
     if st.session_state.user_role == "طالب 👨‍🎓":
-        st.subheader("📚 قائمة المدرسين والبث المباشر (مجاناً)")
+        st.subheader("📚 قائمة المدرسين والبث المباشر")
+        
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute("SELECT id, name, subject, room_name FROM teachers")
+        c.execute("SELECT id, name, subject, age, price, photo_url, room_name FROM teachers")
         teachers = c.fetchall()
         
         if teachers:
-            cols = st.columns(min(len(teachers), 2))
-            for idx, teacher in enumerate(teachers):
-                t_id, t_name, t_sub, room_name = teacher
-                with cols[idx % 2]:
-                    st.markdown('<div class="teacher-card">', unsafe_allow_html=True)
-                    st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
-                    st.markdown(f"📖 **المادة:** {t_sub} | 💰 **الاشتراك:** مجاني 🎉")
-                    st.write("---")
-                    st.write("🗓️ **جدول المواعيد:**")
-                    c.execute("SELECT day, time, topic FROM schedules WHERE teacher_id=?", (t_id,))
-                    schedules = c.fetchall()
-                    if schedules:
-                        for s in schedules:
-                            st.write(f"- **{s[0]}** الساعة **{s[1]}**: {s[2]}")
-                    else:
-                        st.caption("لا توجد مواعيد مضافة حالياً.")
+            for t in teachers:
+                t_id, t_name, t_sub, t_age, t_price, t_photo, room_name = t
+                
+                st.markdown('<div class="teacher-card">', unsafe_allow_html=True)
+                col_img, col_info = st.columns([1, 4])
+                
+                with col_img:
+                    st.image(t_photo if t_photo else "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=110)
+                
+                with col_info:
+                    st.markdown(f"## 👨‍🏫 الأستاذ: **{t_name}**")
+                    st.markdown(f"📖 **المادة:** {t_sub} | 🎂 **العمر:** {t_age} سنة | 💰 **المصاريف:** {t_price} جنيه")
+                
+                st.write("---")
+                
+                # جدول المواعيد
+                st.write("🗓️ **جدول المواعيد:**")
+                c.execute("SELECT day, time, topic FROM schedules WHERE teacher_id=?", (t_id,))
+                schedules = c.fetchall()
+                if schedules:
+                    for s in schedules:
+                        st.write(f"- **{s[0]}** الساعة **{s[1]}**: {s[2]}")
+                else:
+                    st.caption("لا توجد مواعيد مضافة حالياً.")
 
-                    st.write("🔴 **شاشة البث المباشر:**")
-                    jitsi_html = f"""
-                    <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false" 
-                            style="height: 380px; width: 100%; border: 1px solid #3b82f6; border-radius: 10px;"
-                            allow="camera; microphone; display-capture; autoplay" allowfullscreen>
-                    </iframe>
-                    """
-                    components.html(jitsi_html, height=390)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                # البث المباشر الداخلي للـ الطالب (إلغاء صفحة فتح التطبيقات الخارجية)
+                st.write("🔴 **البث المباشر (داخلي مباشرةً):**")
+                
+                embedded_live_code = f"""
+                <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true&interfaceConfig.SHOW_JITSI_WATERMARK=false" 
+                        style="height: 500px; width: 100%; border: 2px solid #38bdf8; border-radius: 12px;"
+                        allow="camera; microphone; display-capture; autoplay; clipboard-write" allowfullscreen>
+                </iframe>
+                """
+                components.html(embedded_live_code, height=515)
+                st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.info("لا يوجد مدرسين مسجلين في المنصة حتى الآن.")
+            st.info("لا يوجد أساتذة مسجلين حالياً.")
         conn.close()
 
+    # ---------------- B. واجهة الأستاذ ----------------
     elif st.session_state.user_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 استوديو الأستاذ وإدارة الحصص")
+        st.subheader("👨‍🏫 استوديو الأستاذ")
+        
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        teacher_username = st.session_state.user_email.split('@')[0]
-        c.execute("SELECT id, name, subject, room_name FROM teachers WHERE name=?", (teacher_username,))
+        c.execute("SELECT id, name, subject, age, price, photo_url, room_name FROM teachers WHERE email=?", (st.session_state.user_email,))
         t_data = c.fetchone()
         
-        tab_live, tab_schedule = st.tabs(["🎙️ استوديو البث المباشر", "📅 تنظيم المواعيد"])
+        tab_profile, tab_live, tab_sch = st.tabs(["👤 الملف الشخصي والبيانات", "🎙️ استوديو البث الحي", "📅 إضافة المواعيد"])
         
+        # 1. إدخال وتعديل البيانات
+        with tab_profile:
+            st.write("📝 **أدخل أو عدل بياناتك لتظهر للطلاب:**")
+            with st.form("update_profile"):
+                curr_name = t_data[1] if t_data else ""
+                curr_sub = t_data[2] if t_data else ""
+                curr_age = t_data[3] if t_data else 30
+                curr_price = t_data[4] if t_data else 0.0
+                curr_photo = t_data[5] if t_data else ""
+                
+                name_in = st.text_input("الاسم الكامل:", value=curr_name)
+                sub_in = st.text_input("المادة الدراسية:", value=curr_sub)
+                age_in = st.number_input("العمر:", value=curr_age, min_value=18, max_value=80)
+                price_in = st.number_input("المصاريف (بالجنيه):", value=curr_price)
+                photo_in = st.text_input("رابط الصورة الشخصية (URL):", value=curr_photo)
+                
+                if st.form_submit_button("حفظ البيانات"):
+                    c.execute("""
+                        UPDATE teachers 
+                        SET name=?, subject=?, age=?, price=?, photo_url=? 
+                        WHERE email=?
+                    """, (name_in, sub_in, age_in, price_in, photo_in, st.session_state.user_email))
+                    conn.commit()
+                    st.success("تم تحديث بياناتك بنجاح!")
+                    st.rerun()
+
+        # 2. البث المباشر للأستاذ (داخلي)
         with tab_live:
-            st.write("🔴 **شاشة البث المباشر للطلاب:**")
-            room_code = t_data[3] if t_data else f"nova_room_{teacher_username}"
-            jitsi_teacher_html = f"""
-            <iframe src="https://meet.jit.si/{room_code}#config.prejoinPageEnabled=false" 
-                    style="height: 520px; width: 100%; border: 0px; border-radius: 10px;"
-                    allow="camera; microphone; display-capture; autoplay" allowfullscreen>
+            st.write("🔴 **شاشة استوديو البث (تفتح الكاميرا والمايك داخل الموقع):**")
+            room_code = t_data[6] if t_data else f"novalive_{st.session_state.user_email.split('@')[0]}"
+            
+            teacher_embedded_code = f"""
+            <iframe src="https://meet.jit.si/{room_code}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true" 
+                    style="height: 520px; width: 100%; border: 0px; border-radius: 12px;"
+                    allow="camera; microphone; display-capture; autoplay; clipboard-write" allowfullscreen>
             </iframe>
             """
-            components.html(jitsi_teacher_html, height=540)
+            components.html(teacher_embedded_code, height=535)
 
-        with tab_schedule:
+        # 3. جدول المواعيد
+        with tab_sch:
             st.write("📅 **إضافة موعد حصة جديد:**")
             if t_data:
-                with st.form("add_schedule_form"):
+                with st.form("add_schedule"):
                     day = st.selectbox("اليوم:", ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"])
-                    time_val = st.text_input("الوقت (مثال: 07:00 مساءً):")
-                    topic = st.text_input("موضوع الحصة:")
-                    submit_sch = st.form_submit_button("حفظ الموعد في قاعدة البيانات")
-                    
-                    if submit_sch and time_val and topic:
+                    time_val = st.text_input("الوقت (مثال: 08:00 مساءً):")
+                    topic = st.text_input("عنوان الحصة:")
+                    if st.form_submit_button("حفظ الموعد"):
                         c.execute("INSERT INTO schedules (teacher_id, day, time, topic) VALUES (?, ?, ?, ?)",
                                   (t_data[0], day, time_val, topic))
                         conn.commit()
-                        st.success("تم إضافة الموعد بنجاح وسيظهر لجميع الطلاب!")
+                        st.success("تم إضافة الموعد!")
                         st.rerun()
         conn.close()
 
+    # ---------------- C. واجهة المطور ----------------
     elif st.session_state.user_role == "المطور التنفيذي 👑":
-        st.subheader("👑 لوحة تحكم المطور وقواعد البيانات")
+        st.subheader("👑 لوحة تحكم المطور وقاعدة البيانات")
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
         
-        m1, m2 = st.columns(2)
-        c.execute("SELECT COUNT(*) FROM users")
-        m1.metric("إجمالي الحسابات بالداتا بيز", c.fetchone()[0])
-        c.execute("SELECT COUNT(*) FROM teachers")
-        m2.metric("عدد المعلمين المسجلين", c.fetchone()[0])
-
-        st.write("---")
-        st.write("📋 **جدول الحسابات المسجلة (Users Database):**")
-        c.execute("SELECT id, email, role FROM users")
-        st.dataframe(c.fetchall(), use_container_width=True)
-
-        st.write("📋 **جدول المدرسين والغرف (Teachers Database):**")
-        c.execute("SELECT id, name, subject, room_name FROM teachers")
+        st.write("📋 **جدول الأساتذة المسجلين بكافة التفاصيل:**")
+        c.execute("SELECT id, name, subject, age, price, photo_url FROM teachers")
         st.dataframe(c.fetchall(), use_container_width=True)
         
+        st.write("📋 **جدول الحسابات (Users):**")
+        c.execute("SELECT id, email, role FROM users")
+        st.dataframe(c.fetchall(), use_container_width=True)
         conn.close()
 
 st.write("---")
-st.caption("🌟 منصة نوفا التعليمية © 2026 - جميع الحقوق محفوظة")
+st.caption("🌟 منصة نوفا التعليمية © 2026")
