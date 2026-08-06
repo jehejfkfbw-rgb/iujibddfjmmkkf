@@ -2,14 +2,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sqlite3
 
-# ==================== 1. إعداد قاعدة البيانات (SQLite) ====================
-DB_NAME = 'nova_v4.db'
+# ==================== 1. إعداد قاعدة البيانات ====================
+DB_NAME = 'nova_v5.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # جدول الحسابات
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +18,6 @@ def init_db():
         )
     ''')
     
-    # جدول المدرسين التفيصلي
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +31,6 @@ def init_db():
         )
     ''')
     
-    # جدول مواعيد الحصص
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS schedules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +41,6 @@ def init_db():
         )
     ''')
 
-    # حساب المطور التنفيذي
     cursor.execute("SELECT * FROM users WHERE role = 'المطور التنفيذي 👑'")
     if not cursor.fetchone():
         cursor.execute("INSERT INTO users (email, password, role) VALUES ('admin@nova.com', '20101999', 'المطور التنفيذي 👑')")
@@ -54,7 +50,7 @@ def init_db():
 
 init_db()
 
-# ==================== 2. التصميم وإعدادات الصفحة ====================
+# ==================== 2. إعدادات الصفحة والتصميم ====================
 st.set_page_config(
     page_title="منصة نوفا التعليمية",
     page_icon="🌟",
@@ -82,16 +78,36 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 3. إدارة الجلسة ====================
+# ==================== 3. حفظ الدخول الدائم في المتصفح (Persistent Login) ====================
+# استرجاع البيانات من الاستعلامات في الـ URL لو تم حفظها سابقاً
+query_params = st.query_params
+
 if "is_logged_in" not in st.session_state:
+    if "user_email" in query_params and "user_role" in query_params:
+        st.session_state.is_logged_in = True
+        st.session_state.user_email = query_params["user_email"]
+        st.session_state.user_role = query_params["user_role"]
+    else:
+        st.session_state.is_logged_in = False
+        st.session_state.user_role = None
+        st.session_state.user_email = ""
+
+def save_login(email, role):
+    st.session_state.is_logged_in = True
+    st.session_state.user_email = email
+    st.session_state.user_role = role
+    # حفظ البيانات في رابط المتصفح ليظل مسجلاً حتى بعد إغلاق المتصفح
+    st.query_params["user_email"] = email
+    st.query_params["user_role"] = role
+
+def logout():
     st.session_state.is_logged_in = False
-if "user_role" not in st.session_state:
     st.session_state.user_role = None
-if "user_email" not in st.session_state:
     st.session_state.user_email = ""
+    st.query_params.clear()
 
 st.title("🌟 منصة نوفا التعليمية")
-st.caption("منصة البث المباشر والحصص التفاعلية الداخلي بالكامل")
+st.caption("تسجيل دخول دائم - يظل الحساب مفتوحاً دائماً")
 st.write("---")
 
 # ==================== 4. شاشة اختيار الحساب والدخول ====================
@@ -100,11 +116,11 @@ if not st.session_state.is_logged_in:
     
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown('<div class="card-box"><h2>👨‍🎓</h2><h3>طالب</h3><p>تصفح الأساتذة والبث المباشر الداخلي</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👨‍🎓</h2><h3>طالب</h3><p>دخول دائم بدون إعادة التسجيل</p></div>', unsafe_allow_html=True)
     with c2:
-        st.markdown('<div class="card-box"><h2>👨‍🏫</h2><h3>أستاذ</h3><p>إدارة البيانات والاستوديو</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👨‍🏫</h2><h3>أستاذ</h3><p>إدارة الاستوديو والحصص</p></div>', unsafe_allow_html=True)
     with c3:
-        st.markdown('<div class="card-box"><h2>👑</h2><h3>المطور</h3><p>لوحة الإدارة والبيانات</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-box"><h2>👑</h2><h3>المطور</h3><p>لوحة التحكم الشاملة</p></div>', unsafe_allow_html=True)
 
     selected_role = st.radio("تأكيد الصفة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"], horizontal=True)
     st.write("---")
@@ -126,9 +142,7 @@ if not st.session_state.is_logged_in:
                         pass
                     conn.close()
 
-                    st.session_state.is_logged_in = True
-                    st.session_state.user_role = "طالب 👨‍🎓"
-                    st.session_state.user_email = s_email
+                    save_login(s_email, "طالب 👨‍🎓")
                     st.rerun()
 
     # دخول الأستاذ
@@ -151,9 +165,7 @@ if not st.session_state.is_logged_in:
                         pass
                     conn.close()
 
-                    st.session_state.is_logged_in = True
-                    st.session_state.user_role = "أستاذ 👨‍🏫"
-                    st.session_state.user_email = t_email
+                    save_login(t_email, "أستاذ 👨‍🏫")
                     st.rerun()
                 else:
                     st.error("كود السر أو البيانات غير صحيحة!")
@@ -163,9 +175,7 @@ if not st.session_state.is_logged_in:
         secret_code = st.text_input("الرقم السري للمطور:", type="password")
         if st.button("دخول لوحة التحكم", use_container_width=True):
             if secret_code.strip() == "20101999":
-                st.session_state.is_logged_in = True
-                st.session_state.user_role = "المطور التنفيذي 👑"
-                st.session_state.user_email = "admin@nova.com"
+                save_login("admin@nova.com", "المطور التنفيذي 👑")
                 st.rerun()
 
 # ==================== 5. الواجهات الداخلية ====================
@@ -173,7 +183,7 @@ else:
     top_col, logout_col = st.columns([3, 1])
     top_col.info(f"مرحباً: **{st.session_state.user_role}** ({st.session_state.user_email})")
     if logout_col.button("🚪 تسجيل الخروج", use_container_width=True):
-        st.session_state.is_logged_in = False
+        logout()
         st.rerun()
 
     # ---------------- A. واجهة الطالب ----------------
@@ -200,8 +210,6 @@ else:
                     st.markdown(f"📖 **المادة:** {t_sub} | 🎂 **العمر:** {t_age} سنة | 💰 **المصاريف:** {t_price} جنيه")
                 
                 st.write("---")
-                
-                # جدول المواعيد
                 st.write("🗓️ **جدول المواعيد:**")
                 c.execute("SELECT day, time, topic FROM schedules WHERE teacher_id=?", (t_id,))
                 schedules = c.fetchall()
@@ -211,11 +219,10 @@ else:
                 else:
                     st.caption("لا توجد مواعيد مضافة حالياً.")
 
-                # البث المباشر الداخلي للـ الطالب (إلغاء صفحة فتح التطبيقات الخارجية)
-                st.write("🔴 **البث المباشر (داخلي مباشرةً):**")
-                
+                # البث المباشر الداخلي
+                st.write("🔴 **البث المباشر (داخلي):**")
                 embedded_live_code = f"""
-                <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true&interfaceConfig.SHOW_JITSI_WATERMARK=false" 
+                <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true" 
                         style="height: 500px; width: 100%; border: 2px solid #38bdf8; border-radius: 12px;"
                         allow="camera; microphone; display-capture; autoplay; clipboard-write" allowfullscreen>
                 </iframe>
@@ -237,7 +244,6 @@ else:
         
         tab_profile, tab_live, tab_sch = st.tabs(["👤 الملف الشخصي والبيانات", "🎙️ استوديو البث الحي", "📅 إضافة المواعيد"])
         
-        # 1. إدخال وتعديل البيانات
         with tab_profile:
             st.write("📝 **أدخل أو عدل بياناتك لتظهر للطلاب:**")
             with st.form("update_profile"):
@@ -263,7 +269,6 @@ else:
                     st.success("تم تحديث بياناتك بنجاح!")
                     st.rerun()
 
-        # 2. البث المباشر للأستاذ (داخلي)
         with tab_live:
             st.write("🔴 **شاشة استوديو البث (تفتح الكاميرا والمايك داخل الموقع):**")
             room_code = t_data[6] if t_data else f"novalive_{st.session_state.user_email.split('@')[0]}"
@@ -276,7 +281,6 @@ else:
             """
             components.html(teacher_embedded_code, height=535)
 
-        # 3. جدول المواعيد
         with tab_sch:
             st.write("📅 **إضافة موعد حصة جديد:**")
             if t_data:
