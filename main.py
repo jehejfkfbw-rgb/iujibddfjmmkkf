@@ -8,8 +8,8 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-# ==================== 2. إعداد قاعدة البيانات الدائمة (v12) ====================
-DB_NAME = 'nova_persistent_v12.db'
+# ==================== 2. إعداد قاعدة البيانات الدائمة (v13) ====================
+DB_NAME = 'nova_persistent_v13.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -52,7 +52,7 @@ def init_db():
         )
     ''')
     
-    # جدول المنشورات والفيديوهات (إضافة حالة الموافقة status)
+    # جدول المنشورات والفيديوهات
     c.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -289,7 +289,6 @@ else:
                         components.html(stream_html, height=450)
                         
                     with tab_media:
-                        # إظهار المنشورات المقبولة فقط من المطور
                         c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=? AND status='approved'", (t_email,))
                         posts = c.fetchall()
                         if posts:
@@ -346,6 +345,7 @@ else:
         with tab_post:
             p_title = st.text_input("عنوان الفيديو أو الشرح:")
             up_file = st.file_uploader("اختر فيديو أو صورة من جهازك:", type=["png", "jpg", "jpeg", "mp4"])
+            
             if st.button("🚀 إرسال للمطور للمراجعة والنشر"):
                 if up_file and p_title:
                     file_path = os.path.join(MEDIA_DIR, up_file.name)
@@ -356,8 +356,26 @@ else:
                     c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
                               (st.session_state.user_email, p_title, f_type, file_path))
                     conn.commit()
-                    st.info("تم رفع الفيديو بنجاح! هو الآن قيد مراجعة المطور للتأكد منه قبل إظهاره للطلاب.")
+                    
+                    # علامة الصح والتنبيه الفوري للأستاذ
+                    st.success("✔️ تم رفع الفيديو وإرساله بنجاح! هو الآن بانتظار موافقة المطور قبل ظهوره للطلاب.")
                     st.rerun()
+
+            st.write("---")
+            st.write("📊 **حالة الفيديوهات والمنشورات الخاصة بك:**")
+            
+            # عرض حالة المحتوى المرفوع للأستاذ مع علامة الصح
+            c.execute("SELECT title, status FROM posts WHERE teacher_email=?", (st.session_state.user_email,))
+            my_posts = c.fetchall()
+            
+            if my_posts:
+                for p_t, p_s in my_posts:
+                    if p_s == 'approved':
+                        st.write(f"✔️ **{p_t}** — (تمت الموافقة والنشر للطلاب ✅)")
+                    else:
+                        st.write(f"✔️ **{p_t}** — (تم الإرسال بنجاح - قيد المراجعة لدى المطور ⏳)")
+            else:
+                st.info("لم تقم بنشر أي منشورات بعد.")
 
         with tab_subs:
             st.write("📋 **الطلاب المتقدمين للاشتراك بعد التحويل:**")
@@ -412,7 +430,6 @@ else:
         
         dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة الفيديوهات والمنشورات", "🚫 إدارة المستخدمين والحظر"])
         
-        # 1. مراجعة منشورات الأساتذة قبل ظهورها للطلاب
         with dev_tab1:
             st.write("🔍 **الفيديوهات والمنشورات المرفوعة من الأساتذة وبانتظار موافقتك:**")
             c.execute("SELECT id, teacher_email, title, media_type, file_path FROM posts WHERE status='pending'")
@@ -445,7 +462,6 @@ else:
             else:
                 st.info("لا توجد فيديوهات أو منشورات جديدة تنتظر المراجعة.")
 
-        # 2. إدارة وتجميد الحسابات
         with dev_tab2:
             st.write("🚫 **قائمة المستخدمين والحظر:**")
             c.execute("SELECT id, email, role, is_blocked FROM users WHERE role != 'مطور'")
