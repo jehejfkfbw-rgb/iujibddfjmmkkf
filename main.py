@@ -2,273 +2,302 @@ import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
 
-# 1. إعدادات الصفحة
-st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="🌟", layout="wide")
+# ==================== 1. إعدادات الصفحة والتصميم ====================
+st.set_page_config(
+    page_title="منصة نوفا التعليمية",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- تنسيق اتجاه الصفحة وتصحيح العرض ---
+# تطبيق تنسيقات CSS احترافية (Dark Dashboard Theme)
 st.markdown("""
-    <style>
-    /* الاتجاه العام للصفحة من اليمين للشمال */
-    .stApp { direction: rtl; text-align: right; }
-    
-    /* إخفاء القائمة الجانبية نهائياً */
-    [data-testid="stSidebar"] { display: none; }
-    
-    /* تنسيق كارت المدرس */
-    .teacher-card {
-        border: 1px solid #2e303d;
-        border-radius: 12px;
-        padding: 15px;
-        background-color: #1e1e2e;
-        margin-bottom: 15px;
+<style>
+    /* الاتجاه العام */
+    .stApp {
+        direction: rtl;
+        text-align: right;
+        background-color: #0e1117;
     }
-    </style>
+    
+    /* تنسيق الكروت الإحصائية */
+    .metric-card {
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        border: 1px solid #374151;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .metric-value {
+        font-size: 28px;
+        font-weight: bold;
+        color: #60a5fa;
+    }
+    .metric-label {
+        font-size: 14px;
+        color: #9ca3af;
+    }
+
+    /* كارت المدرس للطلاب */
+    .course-card {
+        background-color: #1f2937;
+        border-radius: 16px;
+        border: 1px solid #374151;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    
+    /* الهيدر العلوي */
+    .main-header {
+        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
+        padding: 24px;
+        border-radius: 16px;
+        color: white;
+        margin-bottom: 25px;
+    }
+
+    /* تحسين الزر الرئيسي */
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: bold;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# 2. تهيئة قواعد البيانات المؤقتة وحالات تسجيل الدخول (Session State)
+# ==================== 2. تهيئة الذاكرة وقواعد البيانات ====================
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
+
+if "user_info" not in st.session_state:
+    st.session_state.user_info = None
+
 if "teachers" not in st.session_state:
     st.session_state.teachers = [
         {
             "id": 1,
             "name": "أحمد محمود",
-            "age": 35,
             "subject": "الفيزياء",
             "price": 150,
-            "image": "https://via.placeholder.com/150/007bff/ffffff?text=Prof+Ahmed",
+            "image": "https://via.placeholder.com/150/3b82f6/ffffff?text=Prof+Ahmed",
             "room_name": "nova_physics_room_1",
+            "uploaded_videos": [{"name": "المحاضرة 1: مقدمة في الكهربية", "file": None}]
+        },
+        {
+            "id": 2,
+            "name": "سارة الشريف",
+            "subject": "الرياضيات",
+            "price": 200,
+            "image": "https://via.placeholder.com/150/ec4899/ffffff?text=Prof+Sara",
+            "room_name": "nova_math_room_2",
             "uploaded_videos": []
         }
     ]
 
 if "subscriptions" not in st.session_state:
-    st.session_state.subscriptions = {}
+    st.session_state.subscriptions = {} # Format: {teacher_id: subscription_date}
 
-if "user_role" not in st.session_state:
-    st.session_state.user_role = None
-
-if "is_logged_in" not in st.session_state:
-    st.session_state.is_logged_in = False
-
-# ---------------- الهيدر الرئيسي ----------------
-st.title("🌟 منصة نوفا التعليمية")
-st.caption("المنصة المترابطة للتعليم الإلكتروني - البث المباشر والحصص المسجلة")
-st.write("---")
-
-# ---------------- خيارات نوع الحساب في منتصف الشاشة ----------------
-if not st.session_state.is_logged_in:
-    st.write("### ⚙️ اختر نوع الحساب للدخول:")
-    # أزرار اختيار نوع الحساب في المنتصف مريحة للموبايل
-    selected_role = st.radio(
-        "نوع الحساب:",
-        ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"],
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-    st.write("---")
-else:
-    # شريط علوي بعد تسجيل الدخول يعرض نوع الحساب وزر الخروج
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        st.success(f"مرحباً بك! نوع الحساب الحالي: **{st.session_state.user_role}**")
-    with c2:
-        if st.button("🚪 تسجيل الخروج", use_container_width=True):
-            st.session_state.is_logged_in = False
-            st.session_state.user_role = None
-            st.rerun()
-
-# ==================== شاشات الدخول والواجهات ====================
-
+# ==================== 3. بوابة تسجيل الدخول الموحدة ====================
 if not st.session_state.is_logged_in:
     
-    # 1. تسجيل دخول الطالب
-    if selected_role == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 دخول الطالب")
-        with st.form("student_login_form"):
-            s_email = st.text_input("البريد الإلكتروني:")
-            s_pass = st.text_input("كلمة السر:", type="password")
-            s_btn = st.form_submit_button("دخول كـ طالب", use_container_width=True)
+    # رأس شاشة الدخول
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("""
+            <div style='text-align: center;'>
+                <h1 style='color: #60a5fa; font-size: 42px;'>🎓 منصة نوفا</h1>
+                <p style='color: #9ca3af;'>بوابتك الموحدة للتعلم الذكي والبث المباشر</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("unified_login_form"):
+            st.subheader("🔑 تسجيل الدخول لحسابك")
+            email_or_user = st.text_input("اسم المستخدم أو البريد الإلكتروني:")
+            password = st.text_input("كلمة السر:", type="password")
             
-            if s_btn:
-                if s_email and s_pass:
+            submit = st.form_submit_button("دخول المنصة", use_container_width=True)
+            
+            if submit:
+                # منطق الدخول الأمني التلقائي
+                if email_or_user.strip() == "admin" and password == "20101999":
                     st.session_state.is_logged_in = True
-                    st.session_state.user_role = "طالب 👨‍🎓"
-                    st.success("تم تسجيل الدخول بنجاح!")
+                    st.session_state.user_info = {"name": "المطور التنفيذي", "role": "المطور التنفيذي 👑", "email": "admin@nova.com"}
+                    st.success("تم تسجيل الدخول كـ مطور تنفيذي!")
+                    st.rerun()
+                elif password == "90100":
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_info = {"name": email_or_user or "المعلم", "role": "أستاذ 👨‍🏫", "email": email_or_user}
+                    st.success("تم تسجيل الدخول كـ معلم!")
+                    st.rerun()
+                elif email_or_user and password:
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_info = {"name": email_or_user, "role": "طالب 👨‍🎓", "email": email_or_user}
+                    st.success("تم تسجيل الدخول كـ طالب!")
                     st.rerun()
                 else:
-                    st.error("يرجى إدخال الإيميل وكلمة السر!")
+                    st.error("يرجى إدخال اسم المستخدم وكلمة السر الصحيحة.")
 
-    # 2. تسجيل دخول الأستاذ
-    elif selected_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 دخول الأستاذ")
-        with st.form("teacher_login_form"):
-            t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
-            t_email = st.text_input("البريد الإلكتروني:")
-            t_pass = st.text_input("كلمة السر:", type="password")
-            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ", use_container_width=True)
-            
-            if login_btn:
-                if t_secret.strip() == "90100" and t_email and t_pass:
-                    st.session_state.is_logged_in = True
-                    st.session_state.user_role = "أستاذ 👨‍🏫"
-                    st.success("تم الدخول بنجاح!")
-                    st.rerun()
-                else:
-                    st.error("كود السر أو البيانات غير صحيحة! (كود السر المطلوب: 90100)")
+        st.info("💡 **تلميح للدخول:**\n- **طالب:** أي إيميل وكلمة سر.\n- **معلم:** كلمة السر `90100`.\n- **المطور:** اسم المستخدم `admin` وكلمة السر `20101999`.")
 
-    # 3. تسجيل دخول المطور التنفيذي
-    elif selected_role == "المطور التنفيذي 👑":
-        st.subheader("👑 لوحة تحكم المطور التنفيذي")
-        secret_code = st.text_input("أدخل الرقم السري للمطور التنفيذي:", type="password")
-        if st.button("دخول لوحة التحكم", use_container_width=True):
-            if secret_code.strip() == "20101999":
-                st.session_state.is_logged_in = True
-                st.session_state.user_role = "المطور التنفيذي 👑"
-                st.success("تم التحقق بنجاح!")
-                st.rerun()
-            else:
-                st.error("الرقم السري غير صحيح!")
-
-# ==================== المحتوى الداخلي بعد تسجيل الدخول ====================
+# ==================== 4. شاشة لوحة التحكم بعد الدخول ====================
 else:
-    # ---------------- واجهة الطالب ----------------
-    if st.session_state.user_role == "طالب 👨‍🎓":
-        st.subheader("👨‍🏫 قائمة المدرسين والمواد المتاحة")
-        
-        cols = st.columns(3)
-        for index, teacher in enumerate(st.session_state.teachers):
-            with cols[index % 3]:
-                st.markdown('<div class="teacher-card">', unsafe_allow_html=True)
-                st.image(teacher["image"], width=130)
-                st.markdown(f"### الأستاذ: **{teacher['name']}**")
-                st.markdown(f"👤 **العمر:** {teacher.get('age', 30)} سنة")
-                st.markdown(f"📖 **المادة:** {teacher['subject']}")
-                st.markdown(f"💰 **الاشتراك:** {teacher['price']} جنيه/شهرياً")
-                
-                t_id = teacher["id"]
-                sub_date = st.session_state.subscriptions.get(t_id, None)
-                
-                if sub_date:
-                    days_passed = (datetime.now() - sub_date).days
-                    days_left = 30 - days_passed
-                    
-                    if days_left > 0:
-                        st.success(f"✅ اشتراك نشط (متبقي {days_left} يوم)")
-                        st.markdown("---")
-                        st.write("🎥 **الحصص والفيديوهات المسجلة:**")
-                        if teacher["uploaded_videos"]:
-                            for v_idx, video_data in enumerate(teacher["uploaded_videos"]):
-                                st.write(f"📌 **حصة رقم {v_idx + 1}:** {video_data['name']}")
-                                st.video(video_data["content"])
-                        else:
-                            st.caption("لا توجد فيديوهات مسجلة مرفوعة لهذا المدرس بعد.")
-                            
-                        st.write("🔴 **البث المباشر الحي:**")
-                        room_id = teacher.get("room_name", f"nova_room_{t_id}")
-                        jitsi_html = f"""
-                        <iframe src="https://meet.jit.si/{room_id}#config.prejoinPageEnabled=false" 
-                                style="height: 400px; width: 100%; border: 2px solid #28a745; border-radius: 10px;"
-                                allow="camera; microphone; display-capture">
-                        </iframe>
-                        """
-                        components.html(jitsi_html, height=420)
-                    else:
-                        st.error("⚠️ انتهت فترة الاشتراك!")
-                        if st.button(f"تجديد الاشتراك ({teacher['price']} جنيه)", key=f"pay_{t_id}"):
-                            st.session_state.subscriptions[t_id] = datetime.now()
-                            st.rerun()
-                else:
-                    st.warning("🔒 المحتوى مغلق. اشترك الآن لرؤية الحصص والبث!")
-                    if st.button(f"اشتراك الآن مع {teacher['name']}", key=f"btn_sub_{t_id}"):
-                        st.session_state.subscriptions[t_id] = datetime.now()
-                        st.balloons()
-                        st.rerun()
-                
-                st.markdown('</div>', unsafe_allow_html=True)
+    user = st.session_state.user_info
 
-    # ---------------- واجهة الأستاذ ----------------
-    elif st.session_state.user_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 لوحة التحكم واستوديو الأستاذ")
+    # --- القائمة الجانبية (Sidebar) ---
+    with st.sidebar:
+        st.markdown(f"### 👤 Welcome, {user['name']}")
+        st.caption(f"المنصب: **{user['role']}**")
+        st.markdown("---")
         
-        teacher_names = [t["name"] for t in st.session_state.teachers]
-        selected_t_name = st.selectbox("اختر ملفك الشخصي لإدارته:", teacher_names)
-        curr_teacher = next(t for t in st.session_state.teachers if t["name"] == selected_t_name)
+        # التنقل الداخلي في اللوحة
+        if user["role"] == "طالب 👨‍🎓":
+            page = st.radio("القائمة الرئيسية", ["📚 دروسي واشتراكاتي", "🔍 استكشاف المدرسين", "⚙️ الإعدادات"])
+        elif user["role"] == "أستاذ 👨‍🏫":
+            page = st.radio("لوحة المعلم", ["📊 نظرة عامة", "📤 رفع الحصص المسجلة", "🔴 استوديو البث المباشر"])
+        else: # المطور
+            page = st.radio("لوحة الإدارة", ["📈 النظرة الشاملة", "👨‍🏫 إدارة الأساتذة", "⚙️ إعدادات النظام"])
+            
+        st.markdown("---")
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
+            st.session_state.is_logged_in = False
+            st.session_state.user_info = None
+            st.rerun()
+
+    # --- الهيدر الرئيسي لكل صفحة ---
+    st.markdown(f"""
+        <div class="main-header">
+            <h2 style="margin:0;">🚀 لوحة تحكم المنصة</h2>
+            <p style="margin:0; opacity: 0.8;">مرحباً بك مجدداً {user['name']} | نوع الحساب: {user['role']}</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ---------------- A. واجهة الطالب ----------------
+    if user["role"] == "طالب 👨‍🎓":
+        if page in ["📚 دروسي واشتراكاتي", "🔍 استكشاف المدرسين"]:
+            st.subheader("👨‍🏫 المدرسون والمواد المتاحة")
+            
+            cols = st.columns(2)
+            for idx, teacher in enumerate(st.session_state.teachers):
+                with cols[idx % 2]:
+                    st.markdown(f"""
+                        <div class="course-card">
+                            <h3>👨‍🏫 الأستاذ: {teacher['name']}</h3>
+                            <p>📖 <b>المادة:</b> {teacher['subject']} | 💰 <b>الاشتراك:</b> {teacher['price']} جنيه/شهرياً</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    t_id = teacher["id"]
+                    is_subbed = t_id in st.session_state.subscriptions
+                    
+                    if is_subbed:
+                        st.success("✅ أنت مشترك في هذه المادة")
+                        with st.expander("🎥 عرض الحصص والبث المباشر"):
+                            st.write("📌 **الحصص المسجلة:**")
+                            if teacher["uploaded_videos"]:
+                                for v_idx, vid in enumerate(teacher["uploaded_videos"]):
+                                    st.write(f"- حصة {v_idx+1}: {vid['name']}")
+                            else:
+                                st.caption("لا يوجد فيديوهات مرفوعة حتى الآن.")
+                            
+                            st.write("🔴 **البث المباشر الحالي:**")
+                            jitsi_html = f"""
+                            <iframe src="https://meet.jit.si/{teacher['room_name']}#config.prejoinPageEnabled=false" 
+                                    style="height: 350px; width: 100%; border: 1px solid #374151; border-radius: 10px;"
+                                    allow="camera; microphone; display-capture; autoplay" allowfullscreen>
+                            </iframe>
+                            """
+                            components.html(jitsi_html, height=360)
+                    else:
+                        if st.button(f"💳 الاشتراك الآن ({teacher['price']} جنيه)", key=f"sub_{t_id}"):
+                            st.session_state.subscriptions[t_id] = datetime.now()
+                            st.balloons()
+                            st.rerun()
+
+        elif page == "⚙️ الإعدادات":
+            st.subheader("⚙️ إعدادات الحساب")
+            st.text_input("الاسم:", value=user["name"])
+            st.text_input("البريد الإلكتروني:", value=user["email"])
+            st.button("حفظ التغييرات")
+
+    # ---------------- B. واجهة الأستاذ ----------------
+    elif user["role"] == "أستاذ 👨‍🏫":
+        # تحديد ملف المدرس الحالي
+        curr_teacher = st.session_state.teachers[0] # افتراضياً المدرس الأول
         
-        tab_data, tab_upload, tab_live = st.tabs([
-            "📋 بيانات المدرس والمادة", 
-            "📤 نشر فيديو/حصة جديدة", 
-            "🎙️ غرف البث المباشر"
-        ])
-        
-        with tab_data:
-            st.write("✏️ **إضافة مدرس جديد إلى المنصة:**")
-            with st.form("teacher_profile"):
-                t_name = st.text_input("اسم الأستاذ الجديد:")
-                t_age = st.number_input("العمر:", min_value=20, max_value=80, value=30)
-                t_sub = st.text_input("المادة الدراسية:")
-                t_price = st.number_input("سعر الاشتراك الشهري (جنيه):", min_value=0, value=150)
-                t_img = st.text_input("رابط الصورة الشخصية:", value="https://via.placeholder.com/150/007bff/ffffff?text=Teacher")
-                save_btn = st.form_submit_button("حفظ وإضافة الأستاذ")
+        if page == "📊 نظرة عامة":
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{len(st.session_state.subscriptions)}</div><div class="metric-label">إجمالي الطلاب المشتركين</div></div>', unsafe_allow_html=True)
+            with c2:
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{len(curr_teacher["uploaded_videos"])}</div><div class="metric-label">الحصص المرفوعة</div></div>', unsafe_allow_html=True)
+            with c3:
+                revenue = len(st.session_state.subscriptions) * curr_teacher["price"]
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{revenue} ج.م</div><div class="metric-label">أرباح الشهر الحالي</div></div>', unsafe_allow_html=True)
+
+        elif page == "📤 رفع الحصص المسجلة":
+            st.subheader("📤 إضافة حصة مسجلة جديدة")
+            v_title = st.text_input("عنوان الحصة/المحاضرة:")
+            u_file = st.file_uploader("اختر فيديو الحصة:", type=["mp4", "mov"])
+            if st.button("نشر الحصة للطلاب") and v_title:
+                curr_teacher["uploaded_videos"].append({"name": v_title, "file": u_file})
+                st.success("تم نشر الحصة بنجاح!")
+
+        elif page == "🔴 استوديو البث المباشر":
+            st.subheader("🎙️ استوديو البث المباشر")
+            st.info("قم بفتح الكاميرا والمايك للبدء في الشرح المباشر للطلاب المشتركين.")
+            jitsi_html = f"""
+            <iframe src="https://meet.jit.si/{curr_teacher['room_name']}#config.prejoinPageEnabled=false" 
+                    style="height: 500px; width: 100%; border: 0px; border-radius: 10px;"
+                    allow="camera; microphone; display-capture; autoplay" allowfullscreen>
+            </iframe>
+            """
+            components.html(jitsi_html, height=520)
+
+    # ---------------- C. واجهة المطور التنفيذي ----------------
+    elif user["role"] == "المطور التنفيذي 👑":
+        if page == "📈 النظرة الشاملة":
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{len(st.session_state.teachers)}</div><div class="metric-label">إجمالي المعلمين</div></div>', unsafe_allow_html=True)
+            with c2:
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{len(st.session_state.subscriptions)}</div><div class="metric-label">الاشتراكات النشطة</div></div>', unsafe_allow_html=True)
+            with c3:
+                total_rev = sum([t["price"] for t_id in st.session_state.subscriptions for t in st.session_state.teachers if t["id"]==t_id])
+                st.markdown(f'<div class="metric-card"><div class="metric-value">{total_rev} ج.م</div><div class="metric-label">إجمالي الدخل المتوقع</div></div>', unsafe_allow_html=True)
+
+        elif page == "👨‍🏫 إدارة الأساتذة":
+            st.subheader("➕ إضافة مدرس جديد للمنصة")
+            with st.form("add_teacher_form"):
+                t_name = st.text_input("اسم المعلم:")
+                t_sub = st.text_input("المادة:")
+                t_price = st.number_input("سعر الاشتراك (جنيه):", value=150)
+                submit_t = st.form_submit_button("إضافة المعلم")
                 
-                if save_btn and t_name and t_sub:
+                if submit_t and t_name:
                     new_id = len(st.session_state.teachers) + 1
-                    room_code = f"nova_room_teacher_{new_id}"
                     st.session_state.teachers.append({
                         "id": new_id,
                         "name": t_name,
-                        "age": t_age,
                         "subject": t_sub,
                         "price": t_price,
-                        "image": t_img,
-                        "room_name": room_code,
+                        "room_name": f"nova_room_{new_id}",
                         "uploaded_videos": []
                     })
-                    st.success(f"تم تسجيل الأستاذ {t_name} بنجاح!")
+                    st.success(f"تمت إضافة الأستاذ {t_name} بنجاح!")
                     st.rerun()
 
-        with tab_upload:
-            st.write(f"📤 **رفع فيديو مسجل للأستاذ: ({curr_teacher['name']})**")
-            uploaded_file = st.file_uploader("اختر فيديو الحصة من جهازك:", type=["mp4", "mov", "avi"])
-            
-            if uploaded_file is not None:
-                if st.button("نشر الحصة للطلاب"):
-                    video_data = {
-                        "name": uploaded_file.name,
-                        "content": uploaded_file.read()
-                    }
-                    curr_teacher["uploaded_videos"].append(video_data)
-                    st.success(f"تم نشر فيديو '{uploaded_file.name}' بنجاح!")
+            st.write("---")
+            st.subheader("📋 قائمة المعلمين الحاليين")
+            for t in st.session_state.teachers:
+                st.write(f"- **{t['name']}** ({t['subject']}) - سعر الاشتراك: {t['price']} ج.م | رمز الغرفة: `{t['room_name']}`")
 
-        with tab_live:
-            st.write(f"🎙️ **استوديو البث المباشر الخاص بـ ({curr_teacher['name']}):**")
-            room_id = curr_teacher["room_name"]
-            jitsi_teacher_html = f"""
-            <iframe src="https://meet.jit.si/{room_id}#config.prejoinPageEnabled=false" 
-                    style="height: 500px; width: 100%; border: 0px; border-radius: 10px;"
-                    allow="camera; microphone; display-capture">
-            </iframe>
-            """
-            components.html(jitsi_teacher_html, height=520)
+        elif page == "⚙️ إعدادات النظام":
+            st.subheader("🔧 خيارات النظام")
+            if st.button("🔴 إعادة ضبط المصنع (مسح البيانات المؤقتة)"):
+                st.session_state.clear()
+                st.rerun()
 
-    # ---------------- واجهة المطور التنفيذي ----------------
-    elif st.session_state.user_role == "المطور التنفيذي 👑":
-        st.subheader("👑 لوحة تحكم المطور التنفيذي")
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("إجمالي الأساتذة", len(st.session_state.teachers))
-        m2.metric("الاشتراكات النشطة", len(st.session_state.subscriptions))
-        
-        total_revenue = sum([t["price"] for t_id in st.session_state.subscriptions.keys() for t in st.session_state.teachers if t["id"] == t_id])
-        m3.metric("إجمالي الإيرادات المتوقعة", f"{total_revenue} جنيه")
-
-        st.write("---")
-        st.write("📋 **قائمة الأساتذة المسجلين بالنظام:**")
-        
-        for t in st.session_state.teachers:
-            with st.expander(f"👨‍🏫 الأستاذ: {t['name']} ({t['subject']})"):
-                st.write(f"- **العمر:** {t.get('age', 'غير محدد')}")
-                st.write(f"- **سعر الاشتراك:** {t['price']} جنيه")
-                st.write(f"- **معرف الغرفة (Jitsi ID):** `{t['room_name']}`")
-                st.write(f"- **عدد الفيديوهات المرفوعة:** {len(t['uploaded_videos'])}")
-
-st.write("---")
-st.caption("🌟 منصة نوفا التعليمية © 2026 - جميع الحقوق محفوظة")
+st.markdown("<br><hr><center style='color:#6b7280;'>🌟 منصة نوفا التعليمية © 2026 - نظام الإدارة الموحد</center>", unsafe_allow_html=True)
