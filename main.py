@@ -3,13 +3,12 @@ import streamlit.components.v1 as components
 import sqlite3
 
 # ==================== 1. إعداد قاعدة البيانات ====================
-DB_NAME = 'nova_v6.db'
+DB_NAME = 'nova_v7.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # جدول الحسابات
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +18,6 @@ def init_db():
         )
     ''')
     
-    # جدول المدرسين
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,11 +26,10 @@ def init_db():
             subject TEXT,
             age INTEGER,
             price REAL,
-            room_name TEXT
+            room_id TEXT
         )
     ''')
     
-    # جدول منشورات المدرسين (فيديوهات وصور من الاستوديو)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,57 +49,78 @@ def init_db():
 
 init_db()
 
-# ==================== 2. التصميم وإعدادات الصفحة والخطوط ====================
+# ==================== 2. التصميم الفخم والمستقبلي (UI/UX) ====================
 st.set_page_config(
     page_title="منصة نوفا التعليمية",
-    page_icon="🌟",
+    page_icon="⚡",
     layout="wide"
 )
 
-# ضبط الألوان وتوضيح النصوص الغامقة بشكل كامل
 st.markdown("""
 <style>
-    /* خلفية التطبيق وتحديد لون النصوص لتكون بيضاء وواضحة */
+    /* خلفية متدرجة وجذابة للتطبيق بالكامل */
     .stApp { 
         direction: rtl; 
         text-align: right; 
-        background-color: #0f172a; 
-        color: #ffffff !important; 
+        background: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #1e1b4b 100%);
+        color: #f8fafc !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* توضيح عناوين الحقول والنصوص فوق خانات الإدخال */
+    /* توضيح كل النصوص والتسميات */
     label, p, span, div, h1, h2, h3, h4, h5, h6 {
-        color: #f8fafc !important;
+        color: #f1f5f9 !important;
         font-weight: 600 !important;
     }
 
-    /* تحسين شكل ولون خانات الإدخال */
-    .stTextInput input {
+    /* تصميم خانات الإدخال بشكل عصري */
+    .stTextInput input, .stNumberInput input {
         background-color: #1e293b !important;
         color: #ffffff !important;
-        border: 1px solid #38bdf8 !important;
-        border-radius: 8px !important;
+        border: 2px solid #6366f1 !important;
+        border-radius: 12px !important;
+        padding: 10px !important;
     }
 
-    /* تحسين تصميم الكروت */
-    .teacher-card {
-        background-color: #1e293b;
-        border: 2px solid #3b82f6;
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 25px;
+    /* أزرار تفاعلية بإضاءة متدرجة */
+    .stButton>button {
+        background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 12px !important;
+        font-weight: bold !important;
+        padding: 12px 24px !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
     }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6);
+    }
+
+    /* كروت المدرسين والمنشورات احترافية */
+    .teacher-card {
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 20px;
+        padding: 24px;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    
     .post-card {
-        background-color: #0f172a;
+        background: #0f172a;
         border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 15px;
+        border-radius: 14px;
+        padding: 18px;
         margin-top: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 3. الجلسة والدخول الدائم ====================
+# ==================== 3. نظام الجلسة والدخول الدائم ====================
 query_params = st.query_params
 
 if "is_logged_in" not in st.session_state:
@@ -128,17 +146,17 @@ def logout():
     st.session_state.user_email = ""
     st.query_params.clear()
 
-st.title("🌟 منصة نوفا التعليمية")
-st.caption("البث المباشر، الفيديوهات، والمنشورات التفاعلية")
+st.title("⚡ منصة نوفا التعليمية الذكية")
+st.caption("الجيل الجديد للتعليم التفاعلي والبث المباشر")
 st.write("---")
 
-# ==================== 4. تسجيل الدخول ====================
+# ==================== 4. شاشة تسجيل الدخول ====================
 if not st.session_state.is_logged_in:
-    selected_role = st.radio("اختر نوع الحساب للدخول:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"], horizontal=True)
+    selected_role = st.radio("اختر صفة الدخول:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"], horizontal=True)
     st.write("---")
 
     if selected_role == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 دخول الطالب")
+        st.subheader("👨‍🎓 تسجيل دخول الطلاب")
         with st.form("student_form"):
             s_email = st.text_input("البريد الإلكتروني:")
             s_pass = st.text_input("كلمة السر:", type="password")
@@ -156,19 +174,19 @@ if not st.session_state.is_logged_in:
                     st.rerun()
 
     elif selected_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 دخول الأستاذ")
+        st.subheader("👨‍🏫 تسجيل دخول الأساتذة")
         with st.form("teacher_form"):
             t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
             t_email = st.text_input("البريد الإلكتروني:")
             t_pass = st.text_input("كلمة السر:", type="password")
-            if st.form_submit_button("دخول الأستاذ", use_container_width=True):
+            if st.form_submit_button("دخول الاستوديو", use_container_width=True):
                 if t_secret.strip() == "90100" and t_email and t_pass:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     try:
                         c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, ?)", (t_email, t_pass, "أستاذ 👨‍🏫"))
-                        c.execute("INSERT INTO teachers (email, name, subject, age, price, room_name) VALUES (?, ?, ?, ?, ?, ?)", 
-                                  (t_email, t_email.split('@')[0], "لم تحدد", 30, 0.0, f"novalive_{t_email.split('@')[0]}"))
+                        c.execute("INSERT INTO teachers (email, name, subject, age, price, room_id) VALUES (?, ?, ?, ?, ?, ?)", 
+                                  (t_email, t_email.split('@')[0], "لم تحدد", 30, 0.0, f"nova_room_{t_email.split('@')[0]}"))
                         conn.commit()
                     except sqlite3.IntegrityError:
                         pass
@@ -185,53 +203,54 @@ if not st.session_state.is_logged_in:
                 save_login("admin@nova.com", "المطور التنفيذي 👑")
                 st.rerun()
 
-# ==================== 5. الواجهات الداخلية ====================
+# ==================== 5. لوحات التحكم الداخلية ====================
 else:
     top_col, logout_col = st.columns([3, 1])
-    top_col.info(f"مرحباً: **{st.session_state.user_role}** ({st.session_state.user_email})")
+    top_col.success(f"أهلاً بك: **{st.session_state.user_role}** ({st.session_state.user_email})")
     if logout_col.button("🚪 تسجيل الخروج", use_container_width=True):
         logout()
         st.rerun()
 
     # ---------------- A. واجهة الطالب ----------------
     if st.session_state.user_role == "طالب 👨‍🎓":
-        st.subheader("📚 البحث عن الأساتذة ومتابعة الدروس")
+        st.subheader("🔍 البحث عن الأساتذة والبث المباشر")
         
-        # شريط البحث
-        search_query = st.text_input("🔍 ابحث عن أستاذ بـ اسمه أو المادة الدراسية:", "")
+        search_query = st.text_input("ابحث باسم الأستاذ أو المادة الدراسية:", "")
         
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
         
         if search_query:
-            c.execute("SELECT id, name, subject, age, price, room_name, email FROM teachers WHERE name LIKE ? OR subject LIKE ?", 
+            c.execute("SELECT id, name, subject, age, price, room_id, email FROM teachers WHERE name LIKE ? OR subject LIKE ?", 
                       (f"%{search_query}%", f"%{search_query}%"))
         else:
-            c.execute("SELECT id, name, subject, age, price, room_name, email FROM teachers")
+            c.execute("SELECT id, name, subject, age, price, room_id, email FROM teachers")
             
         teachers = c.fetchall()
         
         if teachers:
             for t in teachers:
-                t_id, t_name, t_sub, t_age, t_price, room_name, t_email = t
+                t_id, t_name, t_sub, t_age, t_price, room_id, t_email = t
                 
                 st.markdown('<div class="teacher-card">', unsafe_allow_html=True)
                 st.markdown(f"## 👨‍🏫 الأستاذ: **{t_name}**")
                 st.markdown(f"📖 **المادة:** {t_sub} | 🎂 **العمر:** {t_age} سنة | 💰 **المصاريف:** {t_price} جنيه")
                 st.write("---")
                 
-                # عرض البث المباشر
-                st.write("🔴 **شاشة البث المباشر للأستاذ:**")
-                embedded_live_code = f"""
-                <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true" 
-                        style="height: 480px; width: 100%; border: 2px solid #38bdf8; border-radius: 12px;"
-                        allow="camera; microphone; display-capture; autoplay" allowfullscreen>
+                # البث المباشر المحدث للطلاب عبر VDO.ninja البسيط والواقعي
+                st.write("🔴 **البث المباشر الحالي للأستاذ:**")
+                live_url = f"https://vdo.ninja/?view={room_id}&autoplay=1"
+                
+                live_iframe = f"""
+                <iframe src="{live_url}" 
+                        style="height: 500px; width: 100%; border: 2px solid #6366f1; border-radius: 16px; background-color: #000;"
+                        allow="camera; microphone; autoplay" allowfullscreen>
                 </iframe>
                 """
-                components.html(embedded_live_code, height=495)
+                components.html(live_iframe, height=515)
 
-                # عرض الفيديوهات والصور المرفوعة من الاستوديو
-                st.write("🎬 **فيديوهات وصور الأستاذ (من الاستوديو):**")
+                # معرض المرفوعات
+                st.write("🎬 **المحتوى التعليمي والفيديوهات:**")
                 c.execute("SELECT title, media_type, media_data FROM posts WHERE teacher_email=?", (t_email,))
                 posts = c.fetchall()
                 if posts:
@@ -244,44 +263,46 @@ else:
                             st.video(p_data)
                         st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.caption("لم ينشر الأستاذ أي صور أو فيديوهات بعد.")
+                    st.caption("لا توجد فيديوهات أو صور منشور حالياً.")
 
                 st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.warning("لم يتم العثور على أي أستاذ يطابق بحثك.")
+            st.warning("لم يتم العثور على نتائج.")
         conn.close()
 
     # ---------------- B. واجهة الأستاذ ----------------
     elif st.session_state.user_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 استوديو الأستاذ")
+        st.subheader("👨‍🏫 استوديو بث الأستاذ")
         
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute("SELECT id, name, subject, age, price, room_name FROM teachers WHERE email=?", (st.session_state.user_email,))
+        c.execute("SELECT id, name, subject, age, price, room_id FROM teachers WHERE email=?", (st.session_state.user_email,))
         t_data = c.fetchone()
         
-        tab_live, tab_upload, tab_profile = st.tabs(["🎙️ بدء البث المباشر", "📤 نشر صور/فيديوهات من الاستوديو", "👤 تعديل البيانات"])
+        tab_live, tab_upload, tab_profile = st.tabs(["🔴 استوديو البث الحي", "📤 نشر صور/فيديوهات", "👤 تعديل الحساب"])
         
-        # 1. شاشة البث
+        # 1. استوديو البث الواقعي
         with tab_live:
-            st.write("🔴 **اضغط لبدء البث المباشر فوراً (ستظهر الكاميرا للطلاب مباشرةً):**")
-            room_code = t_data[5] if t_data else f"novalive_{st.session_state.user_email.split('@')[0]}"
+            st.write("🎙️ **اضغط على الكاميرا والمايك لبدء البث فوراً للطلاب بدون أي تعقيد:**")
+            room_id = t_data[5] if t_data else f"nova_room_{st.session_state.user_email.split('@')[0]}"
             
-            teacher_live = f"""
-            <iframe src="https://meet.jit.si/{room_code}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true" 
-                    style="height: 520px; width: 100%; border: 0px; border-radius: 12px;"
+            teacher_push_url = f"https://vdo.ninja/?push={room_id}&webcam=1"
+            
+            teacher_iframe = f"""
+            <iframe src="{teacher_push_url}" 
+                    style="height: 530px; width: 100%; border: 2px solid #a855f7; border-radius: 16px; background-color: #000;"
                     allow="camera; microphone; display-capture; autoplay" allowfullscreen>
             </iframe>
             """
-            components.html(teacher_live, height=535)
+            components.html(teacher_iframe, height=545)
 
-        # 2. نشر الملفات من استوديو الجهاز
+        # 2. رفـع الملفات من استوديو الموبايل/الكمبيوتر
         with tab_upload:
-            st.write("📤 **اختر صورة أو فيديو من الاستوديو لنشره للطلاب:**")
-            post_title = st.text_input("عنوان الفيديو أو الصورة:")
-            uploaded_file = st.file_uploader("اختر ملف من معرض الصور/الاستوديو:", type=["png", "jpg", "jpeg", "mp4", "mov", "avi"])
+            st.write("📤 **رفع فيديو أو صورة من المعرض:**")
+            post_title = st.text_input("عنوان المنشور:")
+            uploaded_file = st.file_uploader("اختر ملف من استوديو الجهاز:", type=["png", "jpg", "jpeg", "mp4", "mov"])
             
-            if st.button("🚀 نشر الآن للطلاب", use_container_width=True):
+            if st.button("🚀 نشر للطلاب الآن", use_container_width=True):
                 if uploaded_file and post_title:
                     file_bytes = uploaded_file.read()
                     file_type = "video" if uploaded_file.type.startswith("video") else "image"
@@ -289,14 +310,13 @@ else:
                     c.execute("INSERT INTO posts (teacher_email, title, media_type, media_data) VALUES (?, ?, ?, ?)",
                               (st.session_state.user_email, post_title, file_type, file_bytes))
                     conn.commit()
-                    st.success("تم نشر الملف بنجاح وظهر في صفحتك للطلاب!")
+                    st.success("تم النشر بنجاح!")
                     st.rerun()
                 else:
-                    st.error("يرجى كتابة عنوان وتحديد ملف من الاستوديو!")
+                    st.error("يرجى كتابة العنوان واختيار الملف!")
 
         # 3. تعديل البيانات
         with tab_profile:
-            st.write("📝 **تعديل البيانات الشخصية:**")
             with st.form("update_profile"):
                 curr_name = t_data[1] if t_data else ""
                 curr_sub = t_data[2] if t_data else ""
@@ -305,31 +325,31 @@ else:
                 
                 name_in = st.text_input("الاسم الكامل:", value=curr_name)
                 sub_in = st.text_input("المادة الدراسية:", value=curr_sub)
-                age_in = st.number_input("العمر:", value=curr_age, min_value=18, max_value=80)
-                price_in = st.number_input("المصاريف (بالجنيه):", value=curr_price)
+                age_in = st.number_input("العمر:", value=curr_age)
+                price_in = st.number_input("سعر الدورة/الحصة:", value=curr_price)
                 
-                if st.form_submit_button("حفظ البيانات"):
+                if st.form_submit_button("حفظ التغييرات"):
                     c.execute("UPDATE teachers SET name=?, subject=?, age=?, price=? WHERE email=?", 
                               (name_in, sub_in, age_in, price_in, st.session_state.user_email))
                     conn.commit()
-                    st.success("تم حفظ البيانات!")
+                    st.success("تم تحديث البيانات بنجاح!")
                     st.rerun()
         conn.close()
 
     # ---------------- C. واجهة المطور ----------------
     elif st.session_state.user_role == "المطور التنفيذي 👑":
-        st.subheader("👑 لوحة تحكم المطور")
+        st.subheader("👑 لوحة التحكم المركزية")
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
         
-        st.write("📋 **الأساتذة المسجلين:**")
+        st.write("📋 **سجل الأساتذة:**")
         c.execute("SELECT id, name, subject, age, price, email FROM teachers")
         st.dataframe(c.fetchall(), use_container_width=True)
         
-        st.write("📋 **المنشورات والفيديوهات المرفوعة:**")
+        st.write("📋 **سجل المنشورات:**")
         c.execute("SELECT id, teacher_email, title, media_type FROM posts")
         st.dataframe(c.fetchall(), use_container_width=True)
         conn.close()
 
 st.write("---")
-st.caption("🌟 منصة نوفا التعليمية © 2026")
+st.caption("⚡ منصة نوفا التعليمية © 2026")
