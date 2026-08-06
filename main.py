@@ -5,10 +5,25 @@ from datetime import datetime
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="🌟", layout="wide")
 
-# --- تنسيق اتجاه الصفحة والتصميم العام ---
+# --- تنسيق اتجاه الصفحة وتعديل موقع القائمة الجانبية لتكون على اليسار ---
 st.markdown("""
     <style>
+    /* الاتجاه العام للصفحة من اليمين للشمال */
     .stApp { direction: rtl; text-align: right; }
+    
+    /* نقل القائمة الجانبية إلى اليسار */
+    [data-testid="stSidebar"] {
+        left: 0 !important;
+        right: auto !important;
+        border-right: none !important;
+        border-left: 1px solid #e0e0e0 !important;
+    }
+    
+    /* ضبط هوامش محتوى الصفحة الرئيسي */
+    [data-testid="stMainBlockContainer"] {
+        margin-left: 0 !important;
+    }
+
     .teacher-card {
         border: 1px solid #e0e0e0;
         border-radius: 12px;
@@ -19,7 +34,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. تهيئة قواعد البيانات المؤقتة (Session State)
+# 2. تهيئة قواعد البيانات المؤقتة وحالات تسجيل الدخول (Session State)
 if "teachers" not in st.session_state:
     st.session_state.teachers = [
         {
@@ -30,46 +45,49 @@ if "teachers" not in st.session_state:
             "price": 150,
             "image": "https://via.placeholder.com/150/007bff/ffffff?text=Prof+Ahmed",
             "room_name": "nova_physics_room_1",
-            "uploaded_videos": []  # تخزين الفيديوهات بحجم Bytes
+            "uploaded_videos": []
         }
     ]
 
 if "subscriptions" not in st.session_state:
     st.session_state.subscriptions = {}
 
-if "current_teacher_id" not in st.session_state:
-    st.session_state.current_teacher_id = 1  # الأستاذ الافتراضي المفعّل
+# حفظ حالة تسجيل الدخول العامة والدور المستهدف مرة واحدة
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None  # يحدد نوع الحساب بعد الدخول
 
-if "teacher_authenticated" not in st.session_state:
-    st.session_state.teacher_authenticated = False
-
-if "dev_authenticated" not in st.session_state:
-    st.session_state.dev_authenticated = False
-
-if "student_authenticated" not in st.session_state:
-    st.session_state.student_authenticated = False
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
 
 # ---------------- الهيدر الرئيسي ----------------
 st.title("🌟 منصة نوفا التعليمية")
 st.caption("المنصة المترابطة للتعليم الإلكتروني البث المباشر والحصص المسجلة")
 st.write("---")
 
-# ---------------- القائمة الجانبية ----------------
+# ---------------- القائمة الجانبية (ستظهر في اليسار) ----------------
 with st.sidebar:
-    st.header("⚙️ خيارات الدخول")
-    role = st.radio("اختر نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"])
+    st.header("⚙️ خيارات الحساب")
+    
+    # في حال لم يقم المستخدم بتسجيل الدخول بعد
+    if not st.session_state.is_logged_in:
+        selected_role = st.radio("اختر نوع الحساب للتسجيل:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"])
+    else:
+        st.success(f"مرحباً بك! الحساب الحالي: **{st.session_state.user_role}**")
+        if st.button("🚪 تسجيل الخروج"):
+            st.session_state.is_logged_in = False
+            st.session_state.user_role = None
+            st.rerun()
+            
     st.write("---")
-    
-    # خيار إضافي لإعادة تصفير النظام للتجربة
-    if st.button("🔄 إعادة ضبط الجلسة"):
-        st.session_state.clear()
-        st.rerun()
 
-# ==================== 1. وضع الطالب ====================
-if role == "طالب 👨‍🎓":
-    st.subheader("👨‍🎓 دخول الطالب")
+# ==================== شاشات الدخول والواجهات ====================
+
+# إذا لم يسجل الدخول بعد، نعرض نموذج تسجيل الدخول حسب الخيار المحدد
+if not st.session_state.is_logged_in:
     
-    if not st.session_state.student_authenticated:
+    # 1. تسجيل دخول الطالب
+    if selected_role == "طالب 👨‍🎓":
+        st.subheader("👨‍🎓 دخول الطالب")
         with st.form("student_login_form"):
             st.write("🔑 **تسجيل دخول الطالب:**")
             s_email = st.text_input("البريد الإلكتروني:")
@@ -78,17 +96,48 @@ if role == "طالب 👨‍🎓":
             
             if s_btn:
                 if s_email and s_pass:
-                    st.session_state.student_authenticated = True
-                    st.success("تم تسجيل دخول الطالب بنجاح!")
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_role = "طالب 👨‍🎓"
+                    st.success("تم تسجيل الدخول بنجاح!")
                     st.rerun()
                 else:
                     st.error("يرجى إدخال الإيميل وكلمة السر!")
-    else:
-        st.sidebar.success("حساب الطالب مفعل ✅")
-        if st.sidebar.button("تسجيل الخروج (طالب)"):
-            st.session_state.student_authenticated = False
-            st.rerun()
 
+    # 2. تسجيل دخول الأستاذ
+    elif selected_role == "أستاذ 👨‍🏫":
+        st.subheader("👨‍🏫 لوحة دخول الأستاذ")
+        with st.form("teacher_login_form"):
+            t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
+            t_email = st.text_input("البريد الإلكتروني:")
+            t_pass = st.text_input("كلمة السر:", type="password")
+            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ")
+            
+            if login_btn:
+                if t_secret.strip() == "90100" and t_email and t_pass:
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_role = "أستاذ 👨‍🏫"
+                    st.success("تم الدخول بنجاح!")
+                    st.rerun()
+                else:
+                    st.error("كود السر أو البيانات غير صحيحة! (كود السر المطلوب: 90100)")
+
+    # 3. تسجيل دخول المطور التنفيذي
+    elif selected_role == "المطور التنفيذي 👑":
+        st.subheader("👑 لوحة تحكم المطور التنفيذي")
+        secret_code = st.text_input("أدخل الرقم السري للمطور التنفيذي:", type="password")
+        if st.button("دخول لوحة التحكم"):
+            if secret_code.strip() == "20101999":
+                st.session_state.is_logged_in = True
+                st.session_state.user_role = "المطور التنفيذي 👑"
+                st.success("تم التحقق بنجاح!")
+                st.rerun()
+            else:
+                st.error("الرقم السري غير صحيح!")
+
+# ==================== المحتوى الداخلي بعد تسجيل الدخول مرة واحدة ====================
+else:
+    # ---------------- واجهة الطالب ----------------
+    if st.session_state.user_role == "طالب 👨‍🎓":
         st.subheader("👨‍🏫 قائمة المدرسين والمواد المتاحة")
         
         cols = st.columns(3)
@@ -110,10 +159,7 @@ if role == "طالب 👨‍🎓":
                     
                     if days_left > 0:
                         st.success(f"✅ اشتراك نشط (متبقي {days_left} يوم)")
-                        st.info("🎁 العرض: مشاهدة كافة الحصص + البث المباشر")
-                        
                         st.markdown("---")
-                        # عرض الفيديوهات المسجلة التي رفعها الأستاذ
                         st.write("🎥 **الحصص والفيديوهات المسجلة:**")
                         if teacher["uploaded_videos"]:
                             for v_idx, video_data in enumerate(teacher["uploaded_videos"]):
@@ -122,7 +168,6 @@ if role == "طالب 👨‍🎓":
                         else:
                             st.caption("لا توجد فيديوهات مسجلة مرفوعة لهذا المدرس بعد.")
                             
-                        # البث المباشر
                         st.write("🔴 **البث المباشر الحي:**")
                         room_id = teacher.get("room_name", f"nova_room_{t_id}")
                         jitsi_html = f"""
@@ -133,7 +178,7 @@ if role == "طالب 👨‍🎓":
                         """
                         components.html(jitsi_html, height=420)
                     else:
-                        st.error("⚠️ انتهت فترة الاشتراك 30 يوم!")
+                        st.error("⚠️ انتهت فترة الاشتراك!")
                         if st.button(f"تجديد الاشتراك ({teacher['price']} جنيه)", key=f"pay_{t_id}"):
                             st.session_state.subscriptions[t_id] = datetime.now()
                             st.rerun()
@@ -146,33 +191,12 @@ if role == "طالب 👨‍🎓":
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-# ==================== 2. وضع الأستاذ ====================
-elif role == "أستاذ 👨‍🏫":
-    st.subheader("👨‍🏫 لوحة التحكم واستوديو الأستاذ")
-    
-    if not st.session_state.teacher_authenticated:
-        with st.form("teacher_login_form"):
-            t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
-            t_email = st.text_input("البريد الإلكتروني:")
-            t_pass = st.text_input("كلمة السر:", type="password")
-            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ")
-            
-            if login_btn:
-                # التحقق من كود السر الخاص بالأستاذ: 90100
-                if t_secret.strip() == "90100" and t_email and t_pass:
-                    st.session_state.teacher_authenticated = True
-                    st.success("تم الدخول بنجاح!")
-                    st.rerun()
-                else:
-                    st.error("كود السر أو البيانات غير صحيحة! (كود السر المطلوب: 90100)")
-    else:
-        st.success("🔓 مرحباً بك في استوديو المعلم الخاص بك")
+    # ---------------- واجهة الأستاذ ----------------
+    elif st.session_state.user_role == "أستاذ 👨‍🏫":
+        st.subheader("👨‍🏫 لوحة التحكم واستوديو الأستاذ")
         
-        # اختيار الأستاذ المفعل حالياً
         teacher_names = [t["name"] for t in st.session_state.teachers]
         selected_t_name = st.selectbox("اختر ملفك الشخصي لإدارته:", teacher_names)
-        
-        # الحصول على الأستاذ المختار
         curr_teacher = next(t for t in st.session_state.teachers if t["name"] == selected_t_name)
         
         tab_data, tab_upload, tab_live = st.tabs([
@@ -181,7 +205,6 @@ elif role == "أستاذ 👨‍🏫":
             "🎙️ غرف البث المباشر"
         ])
         
-        # 1. إدخال/تعديل البيانات
         with tab_data:
             st.write("✏️ **إضافة مدرس جديد إلى المنصة:**")
             with st.form("teacher_profile"):
@@ -208,26 +231,21 @@ elif role == "أستاذ 👨‍🏫":
                     st.success(f"تم تسجيل الأستاذ {t_name} بنجاح!")
                     st.rerun()
 
-        # 2. رفع فيديوهات الحصص من الهاتف
         with tab_upload:
             st.write(f"📤 **رفع فيديو مسجل للأستاذ: ({curr_teacher['name']})**")
             uploaded_file = st.file_uploader("اختر فيديو الحصة من جهازك:", type=["mp4", "mov", "avi"])
             
             if uploaded_file is not None:
                 if st.button("نشر الحصة للطلاب"):
-                    # حفظ بيانات الفيديو كـ Bytes لضمان استمراريته
                     video_data = {
                         "name": uploaded_file.name,
                         "content": uploaded_file.read()
                     }
                     curr_teacher["uploaded_videos"].append(video_data)
-                    st.success(f"تم نشر فيديو '{uploaded_file.name}' بنجاح لطلاب {curr_teacher['name']}!")
+                    st.success(f"تم نشر فيديو '{uploaded_file.name}' بنجاح!")
 
-        # 3. البث المباشر
         with tab_live:
             st.write(f"🎙️ **استوديو البث المباشر الخاص بـ ({curr_teacher['name']}):**")
-            st.info("الكاميرا والميكروفون جاهزان للعمل. شاشة البث المباشر متصلة حالياً بالطلاب المشتركين لديك:")
-            
             room_id = curr_teacher["room_name"]
             jitsi_teacher_html = f"""
             <iframe src="https://meet.jit.si/{room_id}#config.prejoinPageEnabled=false" 
@@ -237,26 +255,9 @@ elif role == "أستاذ 👨‍🏫":
             """
             components.html(jitsi_teacher_html, height=520)
 
-        st.write("---")
-        if st.button("تسجيل الخروج كـ أستاذ 🔒"):
-            st.session_state.teacher_authenticated = False
-            st.rerun()
-
-# ==================== 3. المطور التنفيذي (20101999) ====================
-elif role == "المطور التنفيذي 👑":
-    st.subheader("👑 لوحة تحكم المطور التنفيذي")
-    
-    if not st.session_state.dev_authenticated:
-        secret_code = st.text_input("أدخل الرقم السري للمطور التنفيذي:", type="password")
-        if st.button("دخول لوحة التحكم"):
-            if secret_code.strip() == "20101999":
-                st.session_state.dev_authenticated = True
-                st.success("تم التحقق بنجاح!")
-                st.rerun()
-            else:
-                st.error("الرقم السري غير صحيح!")
-    else:
-        st.success("🔓 تم فتح صلاحيات المطور التنفيذي")
+    # ---------------- واجهة المطور التنفيذي ----------------
+    elif st.session_state.user_role == "المطور التنفيذي 👑":
+        st.subheader("👑 لوحة تحكم المطور التنفيذي")
         
         m1, m2, m3 = st.columns(3)
         m1.metric("إجمالي الأساتذة", len(st.session_state.teachers))
@@ -274,10 +275,6 @@ elif role == "المطور التنفيذي 👑":
                 st.write(f"- **سعر الاشتراك:** {t['price']} جنيه")
                 st.write(f"- **معرف الغرفة (Jitsi ID):** `{t['room_name']}`")
                 st.write(f"- **عدد الفيديوهات المرفوعة:** {len(t['uploaded_videos'])}")
-            
-        if st.button("خروج المطور التنفيذي 🔒"):
-            st.session_state.dev_authenticated = False
-            st.rerun()
 
 st.write("---")
 st.caption("🌟 منصة نوفا التعليمية © 2026 - جميع الحقوق محفوظة")
