@@ -5,30 +5,21 @@ from datetime import datetime
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="🌟", layout="wide")
 
-# --- تنسيق اتجاه الصفحة وتعديل موقع القائمة الجانبية لتكون على اليسار ---
+# --- تنسيق اتجاه الصفحة وتصحيح العرض ---
 st.markdown("""
     <style>
     /* الاتجاه العام للصفحة من اليمين للشمال */
     .stApp { direction: rtl; text-align: right; }
     
-    /* نقل القائمة الجانبية إلى اليسار */
-    [data-testid="stSidebar"] {
-        left: 0 !important;
-        right: auto !important;
-        border-right: none !important;
-        border-left: 1px solid #e0e0e0 !important;
-    }
+    /* إخفاء القائمة الجانبية نهائياً */
+    [data-testid="stSidebar"] { display: none; }
     
-    /* ضبط هوامش محتوى الصفحة الرئيسي */
-    [data-testid="stMainBlockContainer"] {
-        margin-left: 0 !important;
-    }
-
+    /* تنسيق كارت المدرس */
     .teacher-card {
-        border: 1px solid #e0e0e0;
+        border: 1px solid #2e303d;
         border-radius: 12px;
         padding: 15px;
-        background-color: #f9f9f9;
+        background-color: #1e1e2e;
         margin-bottom: 15px;
     }
     </style>
@@ -52,47 +43,50 @@ if "teachers" not in st.session_state:
 if "subscriptions" not in st.session_state:
     st.session_state.subscriptions = {}
 
-# حفظ حالة تسجيل الدخول العامة والدور المستهدف مرة واحدة
 if "user_role" not in st.session_state:
-    st.session_state.user_role = None  # يحدد نوع الحساب بعد الدخول
+    st.session_state.user_role = None
 
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
 
 # ---------------- الهيدر الرئيسي ----------------
 st.title("🌟 منصة نوفا التعليمية")
-st.caption("المنصة المترابطة للتعليم الإلكتروني البث المباشر والحصص المسجلة")
+st.caption("المنصة المترابطة للتعليم الإلكتروني - البث المباشر والحصص المسجلة")
 st.write("---")
 
-# ---------------- القائمة الجانبية (ستظهر في اليسار) ----------------
-with st.sidebar:
-    st.header("⚙️ خيارات الحساب")
-    
-    # في حال لم يقم المستخدم بتسجيل الدخول بعد
-    if not st.session_state.is_logged_in:
-        selected_role = st.radio("اختر نوع الحساب للتسجيل:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"])
-    else:
-        st.success(f"مرحباً بك! الحساب الحالي: **{st.session_state.user_role}**")
-        if st.button("🚪 تسجيل الخروج"):
+# ---------------- خيارات نوع الحساب في منتصف الشاشة ----------------
+if not st.session_state.is_logged_in:
+    st.write("### ⚙️ اختر نوع الحساب للدخول:")
+    # أزرار اختيار نوع الحساب في المنتصف مريحة للموبايل
+    selected_role = st.radio(
+        "نوع الحساب:",
+        ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "المطور التنفيذي 👑"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    st.write("---")
+else:
+    # شريط علوي بعد تسجيل الدخول يعرض نوع الحساب وزر الخروج
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.success(f"مرحباً بك! نوع الحساب الحالي: **{st.session_state.user_role}**")
+    with c2:
+        if st.button("🚪 تسجيل الخروج", use_container_width=True):
             st.session_state.is_logged_in = False
             st.session_state.user_role = None
             st.rerun()
-            
-    st.write("---")
 
 # ==================== شاشات الدخول والواجهات ====================
 
-# إذا لم يسجل الدخول بعد، نعرض نموذج تسجيل الدخول حسب الخيار المحدد
 if not st.session_state.is_logged_in:
     
     # 1. تسجيل دخول الطالب
     if selected_role == "طالب 👨‍🎓":
         st.subheader("👨‍🎓 دخول الطالب")
         with st.form("student_login_form"):
-            st.write("🔑 **تسجيل دخول الطالب:**")
             s_email = st.text_input("البريد الإلكتروني:")
             s_pass = st.text_input("كلمة السر:", type="password")
-            s_btn = st.form_submit_button("دخول")
+            s_btn = st.form_submit_button("دخول كـ طالب", use_container_width=True)
             
             if s_btn:
                 if s_email and s_pass:
@@ -105,12 +99,12 @@ if not st.session_state.is_logged_in:
 
     # 2. تسجيل دخول الأستاذ
     elif selected_role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 لوحة دخول الأستاذ")
+        st.subheader("👨‍🏫 دخول الأستاذ")
         with st.form("teacher_login_form"):
             t_secret = st.text_input("كود السر الخاص بالأساتذة:", type="password")
             t_email = st.text_input("البريد الإلكتروني:")
             t_pass = st.text_input("كلمة السر:", type="password")
-            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ")
+            login_btn = st.form_submit_button("تسجيل الدخول كـ أستاذ", use_container_width=True)
             
             if login_btn:
                 if t_secret.strip() == "90100" and t_email and t_pass:
@@ -125,7 +119,7 @@ if not st.session_state.is_logged_in:
     elif selected_role == "المطور التنفيذي 👑":
         st.subheader("👑 لوحة تحكم المطور التنفيذي")
         secret_code = st.text_input("أدخل الرقم السري للمطور التنفيذي:", type="password")
-        if st.button("دخول لوحة التحكم"):
+        if st.button("دخول لوحة التحكم", use_container_width=True):
             if secret_code.strip() == "20101999":
                 st.session_state.is_logged_in = True
                 st.session_state.user_role = "المطور التنفيذي 👑"
@@ -134,7 +128,7 @@ if not st.session_state.is_logged_in:
             else:
                 st.error("الرقم السري غير صحيح!")
 
-# ==================== المحتوى الداخلي بعد تسجيل الدخول مرة واحدة ====================
+# ==================== المحتوى الداخلي بعد تسجيل الدخول ====================
 else:
     # ---------------- واجهة الطالب ----------------
     if st.session_state.user_role == "طالب 👨‍🎓":
