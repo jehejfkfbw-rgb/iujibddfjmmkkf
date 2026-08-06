@@ -1,6 +1,11 @@
 import streamlit as st
 import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+
+# إعدادات خوادم الربط السريع لتثبيت البث الحي
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}]}
+)
 
 # إعدادات صفحة المنصة والشكل الجمالي
 st.set_page_config(
@@ -114,7 +119,7 @@ if not st.session_state.logged_in:
                     st.session_state.current_user = teacher_email
                     if teacher_email not in st.session_state.teachers:
                         st.session_state.teachers[teacher_email] = {
-                            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, "image": "", "lessons": [], "is_live": False
+                            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, "image": None, "lessons": [], "is_live": False
                         }
                     st.success("تم تسجيل الدخول بنجاح! مرحباً بك يا استاذنا.")
                     st.rerun()
@@ -171,13 +176,13 @@ elif st.session_state.user_role == "teacher":
     t_email = st.session_state.current_user
     if t_email not in st.session_state.teachers:
         st.session_state.teachers[t_email] = {
-            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, "image": "", "lessons": [], "is_live": False
+            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, "image": None, "lessons": [], "is_live": False
         }
     t_data = st.session_state.teachers[t_email]
     
     st.success(f"مرحباً بك يا استاذنا الفاضل في لوحة التحكم الخاصة بك! 👨‍🏫 ({t_email})")
     
-    st.markdown("### 📋 اكتب بياناتك الشخصية واسمك ومادتك وصورتك بنفسك:")
+    st.markdown("### 📋 اكتب بياناتك الشخصية واسمك ومادتك وصورتك الشخصية بنفسك:")
     t_name = st.text_input("اكتب اسمك الكامل أو لقبك:", value=t_data.get("name", ""))
     t_subject = st.text_input("مادتك الدراسية:", value=t_data.get("subject", ""))
     t_age = st.number_input("سنك:", min_value=20, max_value=80, value=t_data.get("age", 25))
@@ -186,7 +191,14 @@ elif st.session_state.user_role == "teacher":
     default_stage_idx = stages_list.index(saved_stage) if saved_stage in stages_list else 0
     t_stage = st.selectbox("المرحلة الدراسية التي تدرس لها:", stages_list, index=default_stage_idx)
     t_price = st.number_input("مصاريف الاشتراك الشهري (جنيه):", value=t_data.get("price", 50))
-    t_image = st.text_input("رابط صورتك الشخصية (صورة URL):", value=t_data.get("image", ""))
+    
+    # اختيار ورفع الصورة الشخصية للمعلم من ملفات الجهاز أو الكاميرا
+    uploaded_image = st.file_uploader("اختر صورتك الشخصية من صور جهازك:", type=["jpg", "jpeg", "png"])
+    if uploaded_image is not None:
+        t_image = uploaded_image
+        st.image(uploaded_image, caption="معاينة صورتك الشخصية", width=120)
+    else:
+        t_image = t_data.get("image", None)
     
     if st.button("حفظ ونشر بياناتي للطلاب"):
         if t_name.strip() and t_subject.strip():
@@ -222,18 +234,19 @@ elif st.session_state.user_role == "teacher":
 
     st.markdown("---")
     st.markdown("### 🔴 غرفة البث الحي المباشر (WebRTC):")
-    st.info("اضغط على زر (START) أدناه لبدء بثك المباشر الحي من الكاميرا ومشاركتها مع طلابك فوراً:")
+    st.info("اضغط على زر (START) أدناه لبدء بثك المباشر الحي ومشاركته مع طلابك فوراً:")
     
-    # تشغيل البث الحي الحقيقي بالكاميرا للمدرس
     webrtc_ctx = webrtc_streamer(
         key=f"teacher_live_{t_email}",
         mode=WebRtcMode.SENDONLY,
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+        rtc_configuration=RTC_CONFIGURATION,
+        media_stream_constraints={"video": True, "audio": True},
+        async_processing=True,
     )
     
     if webrtc_ctx.state.playing:
         st.session_state.teachers[t_email]["is_live"] = True
-        st.success("🟢 البث الحي يعمل الآن على الهواء مباشرة!")
+        st.success("🟢 الكاميرا تعمل وصوتك وصورتك يظهران في البث الحي الآن!")
     else:
         st.session_state.teachers[t_email]["is_live"] = False
 
@@ -267,14 +280,13 @@ elif st.session_state.user_role == "student":
             st.markdown(f"""
                 <div class="live-box">
                     <h2>🔴 بث مباشر حي الآن مع أستاذك: {subbed_t}</h2>
-                    <p>أستاذك يبث الآن مباشرة من الكاميرا!</p>
+                    <p>أستاذك يبث الآن مباشرة بالصوت والصورة!</p>
                 </div>
             """, unsafe_allow_html=True)
-            # استقبال وعرض البث المباشر الحي للطالب
             webrtc_streamer(
                 key=f"student_live_{teacher_key_found}",
                 mode=WebRtcMode.RECVONLY,
-                rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                rtc_configuration=RTC_CONFIGURATION
             )
             st.warning("⚠️ تنبيه مراقبة صارم: يتم مراقبة الشات والتعليقات على مدار 24 ساعة.")
 
@@ -309,13 +321,14 @@ elif st.session_state.user_role == "student":
     else:
         for t_email_key, t_info in active_teachers.items():
             t_display_name = t_info.get('name', 'معلم')
-            t_img_url = t_info.get('image', '').strip()
-            if not t_img_url:
-                t_img_url = "https://images.unsplash.com/photo-1544717305-2782549b5136?w=400"
+            t_img = t_info.get('image', None)
             
             col_img, col_info = st.columns([1, 2])
             with col_img:
-                st.image(t_img_url, caption=f"الأستاذ(ة): {t_display_name}", width=150)
+                if t_img is not None:
+                    st.image(t_img, caption=f"الأستاذ(ة): {t_display_name}", width=130)
+                else:
+                    st.image("https://images.unsplash.com/photo-1544717305-2782549b5136?w=400", caption=f"الأستاذ(ة): {t_display_name}", width=130)
             with col_info:
                 st.markdown(f"""
                     <div class="card-box" style="margin-bottom:0px;">
@@ -348,7 +361,7 @@ elif st.session_state.user_role == "student":
                         webrtc_streamer(
                             key=f"student_view_{t_email_key}",
                             mode=WebRtcMode.RECVONLY,
-                            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                            rtc_configuration=RTC_CONFIGURATION
                         )
                     else:
                         st.info("⏳ الأستاذ لم يبدأ البث الحي بالكاميرا حتى الآن.")
