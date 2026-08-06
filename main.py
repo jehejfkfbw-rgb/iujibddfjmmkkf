@@ -1,9 +1,15 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import sqlite3
+import os
 
-# ==================== 1. إعداد قاعدة البيانات ====================
-DB_NAME = 'nova_final_v2.db'
+# ==================== 1. إنشاء مجلد لحفظ الفيديوهات والصور دائماً ====================
+MEDIA_DIR = "uploaded_media"
+if not os.path.exists(MEDIA_DIR):
+    os.makedirs(MEDIA_DIR)
+
+# ==================== 2. إعداد قاعدة البيانات الدائمة ====================
+DB_NAME = 'nova_persistent_v11.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -20,7 +26,7 @@ def init_db():
         )
     ''')
     
-    # جدول الأساتذة (يشمل العمر والمرحلة الدراسية)
+    # جدول الأساتذة
     c.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,14 +52,14 @@ def init_db():
         )
     ''')
     
-    # جدول المنشورات والفيديوهات
+    # جدول المنشورات والفيديوهات (حفظ مسار الملف لضمان استمراريته)
     c.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_email TEXT,
             title TEXT,
             media_type TEXT,
-            media_data BLOB
+            file_path TEXT
         )
     ''')
 
@@ -62,12 +68,11 @@ def init_db():
 
 init_db()
 
-# ==================== 2. التصميم والواجهة الفاتحة الحديثة ====================
+# ==================== 3. التصميم والواجهة الفاتحة الحديثة ====================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide")
 
 st.markdown("""
 <style>
-    /* خلفية التطبيق العامة بالكامل */
     .stApp {
         direction: rtl;
         text-align: right;
@@ -76,13 +81,11 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* ألوان النصوص والعناوين */
     label, p, span, h1, h2, h3, h4, div {
         color: #0f172a !important;
         font-weight: 700 !important;
     }
 
-    /* شكل حقول الإدخال (الكود، الإيميل، الباسورد) */
     .stTextInput input, .stNumberInput input {
         background-color: #ffffff !important;
         color: #0f172a !important;
@@ -92,7 +95,6 @@ st.markdown("""
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
     }
 
-    /* أزرار التشغيل والتسجيل */
     .stButton>button {
         background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%) !important;
         color: #ffffff !important;
@@ -111,7 +113,6 @@ st.markdown("""
         transform: translateY(-2px);
     }
 
-    /* الكروت الحاوية */
     .card {
         background: #ffffff !important;
         border: 1px solid #e2e8f0 !important;
@@ -121,7 +122,6 @@ st.markdown("""
         margin-bottom: 20px !important;
     }
 
-    /* صندوق فودافون كاش */
     .cash-box {
         background: #16a34a !important;
         color: #ffffff !important;
@@ -135,7 +135,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 3. حفظ الجلسة (تسجيل دخول دائم مرة واحدة) ====================
+# ==================== 4. حفظ الجلسة (تسجيل دخول دائم) ====================
 params = st.query_params
 
 if "user_email" in params and "user_role" in params:
@@ -164,7 +164,7 @@ def logout():
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
-# ==================== 4. شاشات تسجيل الدخول ====================
+# ==================== 5. تسجيل الدخول ====================
 if not st.session_state.is_logged_in:
     role = st.radio("اختر نوع الدخول:", ["أستاذ 👨‍🏫", "طالب 👨‍🎓", "المطور التنفيذي 👑"], horizontal=True)
     st.write("---")
@@ -172,7 +172,7 @@ if not st.session_state.is_logged_in:
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # 1. الأستاذ (كود 90100 + إيميل + باسورد)
+    # 1. دخول الأستاذ
     if role == "أستاذ 👨‍🏫":
         st.subheader("👨‍🏫 تسجيل دخول الأستاذ")
         with st.form("teacher_login"):
@@ -197,7 +197,7 @@ if not st.session_state.is_logged_in:
                 else:
                     st.error("الكود السري (90100) أو البيانات غير صحيحة!")
 
-    # 2. الطالب (إيميل + باسورد)
+    # 2. دخول الطالب
     elif role == "طالب 👨‍🎓":
         st.subheader("👨‍🎓 تسجيل دخول الطالب")
         with st.form("student_login"):
@@ -219,7 +219,7 @@ if not st.session_state.is_logged_in:
                 else:
                     st.error("يرجى إدخال البريد الإلكتروني وكلمة السر!")
 
-    # 3. المطور (كود 900800 فقط)
+    # 3. دخول المطور
     elif role == "المطور التنفيذي 👑":
         st.subheader("👑 دخول المطور")
         with st.form("dev_login"):
@@ -232,7 +232,7 @@ if not st.session_state.is_logged_in:
                     st.error("الكود السري للمطور غير صحيح!")
     conn.close()
 
-# ==================== 5. اللوحات والواجهات الداخلية ====================
+# ==================== 6. لوحات التحكم والواجهات ====================
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}** ({st.session_state.user_email})")
@@ -243,7 +243,7 @@ else:
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # ---------------- A. واجهة الطالب ----------------
+    # ---------------- واجهة الطالب ----------------
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 قائمة الأساتذة والمواد الدراسية")
         
@@ -268,7 +268,7 @@ else:
                     st.markdown(f"📖 **المادة:** {t_sub} | 🏫 **المرحلة:** {t_grade}")
                     st.markdown(f"🎂 **العمر:** {t_age} سنة | 💰 **سعر الاشتراك:** {t_price} جنيه")
                 
-                # فحص حالة الاشتراك
+                # التحقق من حالة الاشتراك الدائمة
                 c.execute("SELECT status FROM subscriptions WHERE student_email=? AND teacher_email=?", 
                           (st.session_state.user_email, t_email))
                 sub_status = c.fetchone()
@@ -289,15 +289,16 @@ else:
                         components.html(stream_html, height=450)
                         
                     with tab_media:
-                        c.execute("SELECT title, media_type, media_data FROM posts WHERE teacher_email=?", (t_email,))
+                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=?", (t_email,))
                         posts = c.fetchall()
                         if posts:
-                            for p_title, p_type, p_data in posts:
+                            for p_title, p_type, p_path in posts:
                                 st.write(f"📌 **{p_title}**")
-                                if p_type == "image":
-                                    st.image(p_data)
-                                elif p_type == "video":
-                                    st.video(p_data)
+                                if os.path.exists(p_path):
+                                    if p_type == "image":
+                                        st.image(p_path)
+                                    elif p_type == "video":
+                                        st.video(p_path)
                         else:
                             st.info("لا توجد منشورات أو فيديوهات نزلها الأستاذ حتى الآن.")
                             
@@ -321,7 +322,7 @@ else:
         else:
             st.info("لا يوجد أساتذة مسجلون حالياً.")
 
-    # ---------------- B. واجهة الأستاذ ----------------
+    # ---------------- واجهة الأستاذ ----------------
     elif st.session_state.user_role == "أستاذ":
         st.subheader("👨‍🏫 استوديو إدارة الدروس والبث")
         
@@ -331,7 +332,6 @@ else:
 
         tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 طلبات الطلاب", "⚙️ بياناتي الشخصية"])
 
-        # 1. البث المباشر
         with tab_stream:
             st.write("📹 **استوديو تشغيل الكاميرا والمايك لبدء البث للطلاب:**")
             t_stream_html = f"""
@@ -342,21 +342,23 @@ else:
             """
             components.html(t_stream_html, height=470)
 
-        # 2. نشر فيديو أو صورة
         with tab_post:
             p_title = st.text_input("عنوان الفيديو أو الشرح:")
             up_file = st.file_uploader("اختر فيديو أو صورة من جهازك:", type=["png", "jpg", "jpeg", "mp4"])
             if st.button("🚀 نشر للمشتركين"):
                 if up_file and p_title:
-                    file_bytes = up_file.read()
+                    # حفظ الملف بشكل دائم على المجلد المحلي
+                    file_path = os.path.join(MEDIA_DIR, up_file.name)
+                    with open(file_path, "wb") as f:
+                        f.write(up_file.getbuffer())
+
                     f_type = "video" if up_file.type.startswith("video") else "image"
-                    c.execute("INSERT INTO posts (teacher_email, title, media_type, media_data) VALUES (?, ?, ?, ?)",
-                              (st.session_state.user_email, p_title, f_type, file_bytes))
+                    c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path) VALUES (?, ?, ?, ?)",
+                              (st.session_state.user_email, p_title, f_type, file_path))
                     conn.commit()
-                    st.success("تم النشر بنجاح! سيظهر فوراً للطلاب المشتركين معهم.")
+                    st.success("تم الحفظ والنشر بنجاح! سيظل الفايل محفوظاً بشكل دائم.")
                     st.rerun()
 
-        # 3. إدارة طلبات اشتراك الطلاب
         with tab_subs:
             st.write("📋 **الطلاب المتقدمين للاشتراك بعد التحويل:**")
             c.execute("SELECT student_email, status FROM subscriptions WHERE teacher_email=?", (st.session_state.user_email,))
@@ -377,12 +379,11 @@ else:
             else:
                 st.info("لا توجد طلبات اشتراك حالياً.")
 
-        # 4. تعديل البيانات الشخصية
         with tab_prof:
             with st.form("prof_form"):
                 name_in = st.text_input("الاسم الكامل:", value=t_info[0] if t_info else "")
                 sub_in = st.text_input("المادة الدراسية:", value=t_info[1] if t_info else "")
-                grade_in = st.text_input("المرحلة الدراسية (مثلاً: الثانوية العامة):", value=t_info[2] if t_info else "")
+                grade_in = st.text_input("المرحلة الدراسية:", value=t_info[2] if t_info else "")
                 age_in = st.number_input("العمر:", value=int(t_info[3]) if t_info and t_info[3] else 30)
                 price_in = st.number_input("سعر الاشتراك (جنيه):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
                 img_in = st.text_input("رابط صورتك الشخصية (URL):", value=t_info[5] if t_info else "")
@@ -391,10 +392,10 @@ else:
                     c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE email=?",
                               (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_email))
                     conn.commit()
-                    st.success("تم تحديث البيانات وصورتك بنجاح!")
+                    st.success("تم حفظ البيانات وصورتك بنجاح في قاعدة البيانات!")
                     st.rerun()
 
-    # ---------------- C. لوحة تحكم المطور ----------------
+    # ---------------- واجهة المطور ----------------
     elif st.session_state.user_role == "مطور":
         st.subheader("👑 لوحة التحكم المركزية للمطور")
         
