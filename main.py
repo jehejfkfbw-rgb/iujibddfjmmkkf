@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import sqlite3
-import base64
 
 # ==================== 1. إعداد قاعدة البيانات ====================
 DB_NAME = 'nova_v6.db'
@@ -53,16 +52,39 @@ def init_db():
 
 init_db()
 
-# ==================== 2. التصميم وإعدادات الصفحة ====================
+# ==================== 2. التصميم وإعدادات الصفحة والخطوط ====================
 st.set_page_config(
     page_title="منصة نوفا التعليمية",
     page_icon="🌟",
     layout="wide"
 )
 
+# ضبط الألوان وتوضيح النصوص الغامقة بشكل كامل
 st.markdown("""
 <style>
-    .stApp { direction: rtl; text-align: right; background-color: #0f172a; color: #f8fafc; }
+    /* خلفية التطبيق وتحديد لون النصوص لتكون بيضاء وواضحة */
+    .stApp { 
+        direction: rtl; 
+        text-align: right; 
+        background-color: #0f172a; 
+        color: #ffffff !important; 
+    }
+    
+    /* توضيح عناوين الحقول والنصوص فوق خانات الإدخال */
+    label, p, span, div, h1, h2, h3, h4, h5, h6 {
+        color: #f8fafc !important;
+        font-weight: 600 !important;
+    }
+
+    /* تحسين شكل ولون خانات الإدخال */
+    .stTextInput input {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #38bdf8 !important;
+        border-radius: 8px !important;
+    }
+
+    /* تحسين تصميم الكروت */
     .teacher-card {
         background-color: #1e293b;
         border: 2px solid #3b82f6;
@@ -175,7 +197,7 @@ else:
     if st.session_state.user_role == "طالب 👨‍🎓":
         st.subheader("📚 البحث عن الأساتذة ومتابعة الدروس")
         
-        # شريط البحث عن الأساتذة
+        # شريط البحث
         search_query = st.text_input("🔍 ابحث عن أستاذ بـ اسمه أو المادة الدراسية:", "")
         
         conn = sqlite3.connect(DB_NAME)
@@ -198,7 +220,7 @@ else:
                 st.markdown(f"📖 **المادة:** {t_sub} | 🎂 **العمر:** {t_age} سنة | 💰 **المصاريف:** {t_price} جنيه")
                 st.write("---")
                 
-                # عرض البث المباشر المباشر
+                # عرض البث المباشر
                 st.write("🔴 **شاشة البث المباشر للأستاذ:**")
                 embedded_live_code = f"""
                 <iframe src="https://meet.jit.si/{room_name}#config.prejoinPageEnabled=false&config.deeplinking.disabled=true" 
@@ -208,7 +230,7 @@ else:
                 """
                 components.html(embedded_live_code, height=495)
 
-                # عرض فيديوهات وصور الأستاذ المرفوعة من الاستوديو
+                # عرض الفيديوهات والصور المرفوعة من الاستوديو
                 st.write("🎬 **فيديوهات وصور الأستاذ (من الاستوديو):**")
                 c.execute("SELECT title, media_type, media_data FROM posts WHERE teacher_email=?", (t_email,))
                 posts = c.fetchall()
@@ -240,7 +262,7 @@ else:
         
         tab_live, tab_upload, tab_profile = st.tabs(["🎙️ بدء البث المباشر", "📤 نشر صور/فيديوهات من الاستوديو", "👤 تعديل البيانات"])
         
-        # 1. شاشة البث المباشر المحدثة
+        # 1. شاشة البث
         with tab_live:
             st.write("🔴 **اضغط لبدء البث المباشر فوراً (ستظهر الكاميرا للطلاب مباشرةً):**")
             room_code = t_data[5] if t_data else f"novalive_{st.session_state.user_email.split('@')[0]}"
@@ -253,7 +275,7 @@ else:
             """
             components.html(teacher_live, height=535)
 
-        # 2. نشر فيديوهات وصور من معرض الصور بالموبايل/الكمبيوتر
+        # 2. نشر الملفات من استوديو الجهاز
         with tab_upload:
             st.write("📤 **اختر صورة أو فيديو من الاستوديو لنشره للطلاب:**")
             post_title = st.text_input("عنوان الفيديو أو الصورة:")
@@ -272,7 +294,7 @@ else:
                 else:
                     st.error("يرجى كتابة عنوان وتحديد ملف من الاستوديو!")
 
-        # 3. تعديل بيانات الأستاذ
+        # 3. تعديل البيانات
         with tab_profile:
             st.write("📝 **تعديل البيانات الشخصية:**")
             with st.form("update_profile"):
