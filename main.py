@@ -9,7 +9,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تصميم وتنسيق CSS عصري وملون للواجهة (ألوان جذابة وخلفيات مميزة)
+# تصميم وتنسيق CSS عصري وملون للواجهة
 st.markdown("""
     <style>
     .main {
@@ -38,20 +38,37 @@ st.markdown("""
         margin-bottom: 20px;
         border-right: 5px solid #FF416C;
     }
+    .ai-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .live-box {
+        background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
     h1, h2, h3 {
         color: #1E3C72;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# قاعدة بيانات المدرسين والطلاب
+# قاعدة بيانات المدرسين (تحتوي على بيانات المدرس وحصصه الخاصة به)
 if "teachers" not in st.session_state:
-    st.session_state.teachers = {
-        "ميس رحمة": {"subject": "لغة إنجليزية وقرآن كريم", "age": 25, "price": 50, "stage": "ثانوي وإعدادي"}
-    }
+    st.session_state.teachers = {}
 
 if "students_db" not in st.session_state:
     st.session_state.students_db = {}
+
+if "live_stream_link" not in st.session_state:
+    st.session_state.live_stream_link = ""
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -61,17 +78,17 @@ if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
 st.title("🎓 منصة نوفا التعليمية المتطورة")
-st.markdown("##### *بوابة التعليم العصرية لجميع المراحل الدراسية (ابتدائي، إعدادي، ثانوي)*")
+st.markdown("##### *بوابة التعليم العصرية، البث المباشر والذكاء الاصطناعي*")
 st.markdown("---")
 
-# ================= شاشة تسجيل الدخول الملونة =================
+# ================= شاشة تسجيل الدخول المرة الواحدة =================
 if not st.session_state.logged_in:
     st.markdown("### 🔐 بوابة الدخول الموحدة")
     
     role_choice = st.selectbox("حدد هويتك في المنصة:", ["طالب", "معلم (مدرس)", "المطور التنفيذي"])
     
     if role_choice == "معلم (مدرس)":
-        st.info("💡 ملاحظة: يتطلب دخول المعلمين إدخال الكود السري الخاص بالمنصة.")
+        st.info("💡 كود المعلم السري لدخول لوحة التحكم هو: 90100")
         teacher_code = st.text_input("كود المعلم السري:", type="password")
         teacher_email = st.text_input("البريد الإلكتروني للمعلم:")
         teacher_pass = st.text_input("كلمة المرور:", type="password")
@@ -82,6 +99,13 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.user_role = "teacher"
                     st.session_state.current_user = teacher_email
+                    # إنشاء بروفایل فارغ للمدرس لو مش موجود
+                    if teacher_email not in st.session_state.teachers:
+                        st.session_state.teachers[teacher_email] = {
+                            "name": "", "subject": "", "age": 25, "stage": "ثانوي", "price": 50, 
+                            "image": "https://images.unsplash.com/photo-1544717305-2782549b5136?w=400",
+                            "lessons": []
+                        }
                     st.success("تم تسجيل الدخول بنجاح! مرحباً بك يا استاذنا.")
                     st.rerun()
                 else:
@@ -102,7 +126,7 @@ if not st.session_state.logged_in:
                     st.session_state.user_role = "student"
                     st.session_state.current_user = student_email
                     if student_email not in st.session_state.students_db:
-                        st.session_state.students_db[student_email] = {"sub_expiry": None, "banned": False}
+                        st.session_state.students_db[student_email] = {"sub_expiry": None, "banned": False, "subscribed_teacher": ""}
                     st.rerun()
             else:
                 st.warning("الرجاء إدخال البريد الإلكتروني وكلمة المرور.")
@@ -138,36 +162,66 @@ elif st.session_state.user_role == "developer":
         st.session_state.user_role = ""
         st.rerun()
 
-# ================= واجهة المعلم العصرية =================
+# ================= واجهة المعلم (يكتب بياناته ويضيف حصصه بنفسه) =================
 elif st.session_state.user_role == "teacher":
-    st.success(f"مرحباً بك يا استاذنا الفاضل في لوحة التحكم! 👨‍🏫 ({st.session_state.current_user})")
+    t_email = st.session_state.current_user
+    t_data = st.session_state.teachers[t_email]
     
-    st.markdown("### 📋 بياناتك الشخصية المعروضة للطلاب:")
-    t_name = st.text_input("اسمك الكريم (مثال: ميس رحمة):", value="ميس رحمة")
-    t_subject = st.text_input("المادة / التخصص:", value="لغة إنجليزية وقرآن كريم")
-    t_age = st.number_input("السن:", min_value=20, max_value=80, value=25)
-    t_stage = st.selectbox("المرحلة الدراسية:", ["ابتدائي", "إعدادي", "ثانوي", "جميع المراحل"])
-    t_price = st.number_input("مصاريف الشهر (جنيه):", value=50)
+    st.success(f"مرحباً بك يا استاذنا الفاضل في لوحة التحكم الخاصة بك! 👨‍🏫 ({t_email})")
     
-    st.markdown("---")
-    st.markdown("### 📢 نشر الحصص والبث المباشر:")
-    lesson_title = st.text_input("عنوان الحصة الجديدة:")
-    lesson_link = st.text_input("رابط الفيديو أو منصة الشرح:")
-    is_live = st.checkbox("🔴 هل هذا بث مباشر؟")
+    st.markdown("### 📋 اكتب بياناتك الشخصية واسمك ومادتك بنفسك:")
+    t_name = st.text_input("اكتب اسمك الكامل أو لقبك:", value=t_data["name"])
+    t_subject = st.text_input("مادتك الدراسية:", value=t_data["subject"])
+    t_age = st.number_input("سنك:", min_value=20, max_value=80, value=t_data["age"])
+    stages_list = ["ابتدائي", "إعدادي", "ثانوي", "جميع المراحل"]
+    default_stage_idx = stages_list.index(t_data["stage"]) if t_data["stage"] in stages_list else 0
+    t_stage = st.selectbox("المرحلة الدراسية التي تدرس لها:", stages_list, index=default_stage_idx)
+    t_price = st.number_input("مصاريف الاشتراك الشهري (جنيه):", value=t_data["price"])
+    t_image = st.text_input("رابط صورتك الشخصية (URL):", value=t_data["image"])
     
-    if st.button("نشر المحتوى الآن"):
-        if lesson_title and lesson_link:
-            st.success("تم نشر الحصة أو البث المباشر بنجاح للطلاب!")
+    if st.button("حفظ ونشر بياناتي للطلاب"):
+        if t_name.strip() and t_subject.strip():
+            st.session_state.teachers[t_email]["name"] = t_name
+            st.session_state.teachers[t_email]["subject"] = t_subject
+            st.session_state.teachers[t_email]["age"] = t_age
+            st.session_state.teachers[t_email]["stage"] = t_stage
+            st.session_state.teachers[t_email]["price"] = t_price
+            st.session_state.teachers[t_email]["image"] = t_image
+            st.success(f"تم حفظ بياناتك بنجاح يا استاذ {t_name}!")
         else:
-            st.warning("الرجاء إدخال العنوان والرابط.")
-            
+            st.warning("الرجاء كتابة الاسم والمادة على الأقل.")
+
+    st.markdown("---")
+    st.markdown("### 📚 إضافة حصة جديدة للطلاب:")
+    lesson_title = st.text_input("عنوان الحصة (مثال: الحصة الأولى - مقدمة المنهج):")
+    lesson_link = st.text_input("رابط فيديو الحصة (يوتيوب أو درايف):")
+    
+    if st.button("➕ نشر الحصة الجديدة"):
+        if lesson_title.strip() and lesson_link.strip():
+            st.session_state.teachers[t_email]["lessons"].append({"title": lesson_title, "link": lesson_link})
+            st.success(f"تم إضافة الحصة ({lesson_title}) بنجاح لتظهر للطلاب المشتركين معك!")
+        else:
+            st.warning("الرجاء إدخال عنوان الحصة والرابط.")
+
+    if st.session_state.teachers[t_email]["lessons"]:
+        st.markdown("#### حصصك الحالية:")
+        for idx, les in enumerate(st.session_state.teachers[t_email]["lessons"], 1):
+            st.write(f"{idx}. {les['title']}")
+
+    st.markdown("---")
+    st.markdown("### 🔴 إدارة البث المباشر الكامل:")
+    new_live_link = st.text_input("رابط البث المباشر (يوتيوب أو زوم):", value=st.session_state.live_stream_link)
+    if st.button("📡 بدء/تحديث البث المباشر للطلاب"):
+        st.session_state.live_stream_link = new_live_link
+        st.success("✅ تم بدء البث المباشر بنجاح!")
+
     st.markdown("---")
     if st.button("تسجيل الخروج"):
         st.session_state.logged_in = False
         st.session_state.user_role = ""
         st.rerun()
 
-# ================= واجهة الطالب العصرية والملونة =================
+# ================= واجهة الطالب =================
 elif st.session_state.user_role == "student":
     student_email = st.session_state.current_user
     
@@ -180,68 +234,97 @@ elif st.session_state.user_role == "student":
     st.markdown(f"### أهلاً بك يا بطل! 🎒 (`{student_email}`)")
     
     if is_subscribed:
-        st.success("🌟 حسابك مفعل باشتراك شهري كامل وساري على جميع المحاضرات.")
+        subbed_t = sub_data.get("subscribed_teacher", "غير محدد")
+        st.success(f"🌟 حسابك مفعل باشتراك شهري كامل مع الأستاذ(ة): **{subbed_t}**")
     else:
-        st.warning("⚡ ملاحظة: أول 3 حصص مجانية بالكامل، وبث مباشر واحد مجاني للمنهج!")
+        st.warning("⚡ ملاحظة: اختر المدرس المناسب لك، وتفقد حصصه واشترك معه!")
 
     st.markdown("---")
-    st.markdown("## 👨‍🏫 المدرسون المتاحون في المنصة:")
     
-    # عرض المدرسين بداخل مربعات ملونة أنيقة
-    for t_n, t_info in st.session_state.teachers.items():
-        st.markdown(f"""
-            <div class="card-box">
-                <h3>📚 الأستاذ(ة): {t_n}</h3>
-                <p><b>المادة:</b> {t_info['subject']}</p>
-                <p><b>المرحلة:</b> {t_info['stage']} | <b>السن:</b> {t_info['age']} سنة</p>
-                <p><b>مصاريف الاشتراك الشهري:</b> {t_info['price']} جنيه فقط</p>
-                <p style="color: #27ae60;"><b>✨ مميزات الاشتراك:</b> أول 3 حصص مجاناً + بث مباشر مجاني للمنهج!</p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # تفاصيل الدفع والاشتراك
-        with st.expandarette if hasattr(st, 'expandarette') else st.expander(f"💳 اشترك الآن مع {t_n}"):
-            st.write("**تفاصيل الدفع لتحويل الاشتراك الشهري:**")
-            st.write("• قيمة الاشتراك: **50 جنيه مصري فقط** لمدة شهر كامل.")
-            st.write("• طريقة الدفع: تحويل عبر محفظة **أورنج كاش** على الرقم المخصص: `01213783090`")
+    # قسم البث المباشر الكامل
+    st.markdown("""
+        <div class="live-box">
+            <h2>🔴 غرفة البث المباشر الكامل للمنصة</h2>
+            <p>تابع البث الحصري مع المعلمين مباشرة بجودة عالية مع مراقبة تفاعلية على مدار 24 ساعة!</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.session_state.live_stream_link:
+        st.success("🎥 البث المباشر جارٍ الآن:")
+        st.video(st.session_state.live_stream_link)
+        st.warning("⚠️ تنبيه مراقبة صارم: يتم مراقبة الشات والتعليقات على مدار 24 ساعة. أي تعليق سلبي يعرضك للحظر الفوري!")
+    else:
+        st.info("⏳ لا يوجد بث مباشر مفعل حالياً من المعلمين.")
+
+    st.markdown("---")
+    
+    # قسم فيديوهات الذكاء الاصطناعي
+    st.markdown("""
+        <div class="ai-box">
+            <h3>🤖 قسم فيديوهات الذكاء الاصطناعي في التعليم</h3>
+            <p>استمتع بشرح مرئي ومبسط لكيفية توظيف الذكاء الاصطناعي في الدراسة!</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col_ai1, col_ai2 = st.columns(2)
+    with col_ai1:
+        if st.button("🎥 فيديو: الذكاء الاصطناعي والمستقبل التعليمي"):
+            st.video("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    with col_ai2:
+        if st.button("🎥 فيديو: كيف تستخدم الأدوات الذكية في المذاكرة"):
+            st.video("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+
+    st.markdown("---")
+    st.markdown("## 👨‍🏫 المدرسون المتاحون في المنصة (اضغط على المدرس لعرض تفاصيله وحصصه):")
+    
+    active_teachers = {k: v for k, v in st.session_state.teachers.items() if v["name"].strip() != ""}
+    
+    if not active_teachers:
+        st.info("📌 لا يوجد مدرسون نشروا بياناتهم حتى الآن. انتظر قليلاً لحين تسجيل المعلمين.")
+    else:
+        for t_email_key, t_info in active_teachers.items():
+            t_display_name = t_info['name']
             
-            pay_phone = st.text_input(f"أدخل رقم هاتفك المحول منه لتفعيل اشتراك {t_n}:", key=f"p_{t_n}")
-            if st.button(f"تأكيد الدفع وتفعيل الشهر لـ {t_n}", key=f"b_{t_n}"):
-                if pay_phone.strip():
-                    st.session_state.students_db[student_email]["sub_expiry"] = datetime.datetime.now() + datetime.timedelta(days=30)
-                    st.success("🎉 تم تأكيد الدفع وتفعيل الاشتراك الشهري المفتوح بنجاح!")
-                    st.rerun()
+            col_img, col_info = st.columns([1, 2])
+            with col_img:
+                st.image(t_info['image'], caption=f"الأستاذ(ة): {t_display_name}", width=150)
+            with col_info:
+                st.markdown(f"""
+                    <div class="card-box" style="margin-bottom:0px;">
+                        <h3>📚 الأستاذ(ة): {t_display_name}</h3>
+                        <p><b>المادة:</b> {t_info['subject']}</p>
+                        <p><b>المرحلة:</b> {t_info['stage']} | <b>السن:</b> {t_info['age']} سنة</p>
+                        <p><b>مصاريف الاشتراك الشهري:</b> {t_info['price']} جنيه فقط</p>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            # قسم الاشتراك وعرض الحصص الخاصة بهذا المدرس فوراً عند الضغط
+            with st.expander(f"💳 تفاصيل الاشتراك وعرض حصص الأستاذ(ة) {t_display_name}"):
+                st.write(f"• الاشتراك الشهري مع **{t_display_name}**: **{t_info['price']} جنيه مصري فقط** لمدة شهر كامل.")
+                st.write("• طريقة الدفع: تحويل عبر محفظة **أورنج كاش** على الرقم المخصص: `01213783090`")
+                
+                pay_phone = st.text_input(f"أدخل رقم هاتفك المحول منه لتفعيل اشتراك {t_display_name}:", key=f"p_{t_email_key}")
+                if st.button(f"تأكيد الدفع وتفعيل اشتراك {t_display_name}", key=f"b_{t_email_key}"):
+                    if pay_phone.strip():
+                        st.session_state.students_db[student_email]["sub_expiry"] = datetime.datetime.now() + datetime.timedelta(days=30)
+                        st.session_state.students_db[student_email]["subscribed_teacher"] = t_display_name
+                        st.success(f"🎉 تم تأكيد الدفع بنجاح! أنت الآن مشترك رسمياً مع الأستاذ(ة) {t_display_name}")
+                        st.rerun()
+                    else:
+                        st.warning("أدخل رقم الهاتف المحول منه أولاً.")
+                
+                st.markdown("---")
+                st.markdown(f"### 🎬 حصص الأستاذ(ة) {t_display_name}:")
+                
+                if not t_info["lessons"]:
+                    st.warning("⚠️ لا يوجد حصص لحد الآن.")
                 else:
-                    st.warning("أدخل رقم الهاتف المحول منه أولاً.")
-
-    st.markdown("---")
-    st.markdown("## 🎬 المحاضرات والبث المباشر:")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("🟢 **الحصة الأولى (مجانية)**")
-        if st.button("مشاهدة الحصة 1"):
-            st.info("جاري عرض الحصة الأولى المجانية...")
-            
-        st.markdown("🟢 **الحصة الثانية (مجانية)**")
-        if st.button("مشاهدة الحصة 2"):
-            st.info("جاري عرض الحصة الثانية المجانية...")
-            
-    with col2:
-        st.markdown("🟢 **الحصة الثالثة (مجانية)**")
-        if st.button("مشاهدة الحصة 3"):
-            st.info("جاري عرض الحصة الثالثة المجانية...")
-            
-        st.markdown("🔴 **البث المباشر المجاني (مرة واحدة بالمنهج)**")
-        if st.button("دخول البث المباشر"):
-            st.warning("⚠️ تنبيه مراقبة صارم: يتم مراقبة التعليقات والشات على مدار 24 ساعة. أي تعليق سلبي أو إساءة يعرض الطالب للحظر الفوري من المنصة!")
-            st.success("تم فتح البث المباشر بنجاح.")
-
-    if is_subscribed:
-        st.markdown("---")
-        st.markdown("### ⭐ المحاضرات المدفوعة الشهرية المفتوحة:")
-        if st.button("مشاهدة محتوى الشهر الكامل"):
-            st.success("تم فتح كافة الدروس والمراجعات الشهرية المتقدمة بنجاح.")
+                    for l_idx, lesson in enumerate(t_info["lessons"], 1):
+                        st.markdown(f"🟢 **{l_idx}. {lesson['title']}**")
+                        if is_subscribed and sub_data.get("subscribed_teacher") == t_display_name:
+                            st.video(lesson['link'])
+                        else:
+                            st.info("🔒 هذه الحصة تتطلب الاشتراك مع هذا المدرس لمشاهدتها.")
 
     st.markdown("---")
     if st.button("تسجيل الخروج"):
