@@ -8,8 +8,8 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-# ==================== 2. إعداد قاعدة البيانات الدائمة ====================
-DB_NAME = 'nova_persistent_v11.db'
+# ==================== 2. إعداد قاعدة البيانات الدائمة (v12) ====================
+DB_NAME = 'nova_persistent_v12.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -52,14 +52,15 @@ def init_db():
         )
     ''')
     
-    # جدول المنشورات والفيديوهات (حفظ مسار الملف لضمان استمراريته)
+    # جدول المنشورات والفيديوهات (إضافة حالة الموافقة status)
     c.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_email TEXT,
             title TEXT,
             media_type TEXT,
-            file_path TEXT
+            file_path TEXT,
+            status TEXT DEFAULT 'pending'
         )
     ''')
 
@@ -268,7 +269,6 @@ else:
                     st.markdown(f"📖 **المادة:** {t_sub} | 🏫 **المرحلة:** {t_grade}")
                     st.markdown(f"🎂 **العمر:** {t_age} سنة | 💰 **سعر الاشتراك:** {t_price} جنيه")
                 
-                # التحقق من حالة الاشتراك الدائمة
                 c.execute("SELECT status FROM subscriptions WHERE student_email=? AND teacher_email=?", 
                           (st.session_state.user_email, t_email))
                 sub_status = c.fetchone()
@@ -289,7 +289,8 @@ else:
                         components.html(stream_html, height=450)
                         
                     with tab_media:
-                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=?", (t_email,))
+                        # إظهار المنشورات المقبولة فقط من المطور
+                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=? AND status='approved'", (t_email,))
                         posts = c.fetchall()
                         if posts:
                             for p_title, p_type, p_path in posts:
@@ -300,7 +301,7 @@ else:
                                     elif p_type == "video":
                                         st.video(p_path)
                         else:
-                            st.info("لا توجد منشورات أو فيديوهات نزلها الأستاذ حتى الآن.")
+                            st.info("لا توجد منشورات أو فيديوهات معتمدة ومتاحة حالياً.")
                             
                 elif sub_status and sub_status[0] == 'pending':
                     st.warning("⏳ طلب اشتراكك قيد المراجعة والموافقة من الأستاذ.")
@@ -345,18 +346,17 @@ else:
         with tab_post:
             p_title = st.text_input("عنوان الفيديو أو الشرح:")
             up_file = st.file_uploader("اختر فيديو أو صورة من جهازك:", type=["png", "jpg", "jpeg", "mp4"])
-            if st.button("🚀 نشر للمشتركين"):
+            if st.button("🚀 إرسال للمطور للمراجعة والنشر"):
                 if up_file and p_title:
-                    # حفظ الملف بشكل دائم على المجلد المحلي
                     file_path = os.path.join(MEDIA_DIR, up_file.name)
                     with open(file_path, "wb") as f:
                         f.write(up_file.getbuffer())
 
                     f_type = "video" if up_file.type.startswith("video") else "image"
-                    c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path) VALUES (?, ?, ?, ?)",
+                    c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
                               (st.session_state.user_email, p_title, f_type, file_path))
                     conn.commit()
-                    st.success("تم الحفظ والنشر بنجاح! سيظل الفايل محفوظاً بشكل دائم.")
+                    st.info("تم رفع الفيديو بنجاح! هو الآن قيد مراجعة المطور للتأكد منه قبل إظهاره للطلاب.")
                     st.rerun()
 
         with tab_subs:
@@ -392,7 +392,7 @@ else:
                     c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE email=?",
                               (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_email))
                     conn.commit()
-                    st.success("تم حفظ البيانات وصورتك بنجاح في قاعدة البيانات!")
+                    st.success("تم حفظ البيانات بنجاح!")
                     st.rerun()
 
     # ---------------- واجهة المطور ----------------
@@ -409,28 +409,65 @@ else:
         col_m2.metric("إجمالي الأساتذة", tc_count)
         
         st.write("---")
-        st.write("🚫 **إدارة المستخدمين والحظر:**")
         
-        c.execute("SELECT id, email, role, is_blocked FROM users WHERE role != 'مطور'")
-        users = c.fetchall()
+        dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة الفيديوهات والمنشورات", "🚫 إدارة المستخدمين والحظر"])
         
-        if users:
-            for u_id, u_email, u_role, is_blocked in users:
-                u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
-                u_col1.write(f"👤 **{u_email}** ({u_role})")
-                
-                if is_blocked == 1:
-                    u_col2.error("محظور 🚫")
-                    if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
-                        c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
+        # 1. مراجعة منشورات الأساتذة قبل ظهورها للطلاب
+        with dev_tab1:
+            st.write("🔍 **الفيديوهات والمنشورات المرفوعة من الأساتذة وبانتظار موافقتك:**")
+            c.execute("SELECT id, teacher_email, title, media_type, file_path FROM posts WHERE status='pending'")
+            pending_posts = c.fetchall()
+            
+            if pending_posts:
+                for p_id, p_teacher, p_title, p_type, p_path in pending_posts:
+                    st.markdown('<div class="card">', unsafe_allow_html=True)
+                    st.write(f"👨‍🏫 **الأستاذ:** {p_teacher}")
+                    st.write(f"📌 **العنوان:** {p_title}")
+                    
+                    if os.path.exists(p_path):
+                        if p_type == "image":
+                            st.image(p_path, width=300)
+                        elif p_type == "video":
+                            st.video(p_path)
+                    
+                    col_ok, col_no = st.columns(2)
+                    if col_ok.button(f"✅ موافقة ونشر", key=f"app_{p_id}"):
+                        c.execute("UPDATE posts SET status='approved' WHERE id=?", (p_id,))
                         conn.commit()
+                        st.success("تمت الموافقة ونشر الفيديو للطلاب!")
                         st.rerun()
-                else:
-                    u_col2.success("نشط ✅")
-                    if u_col3.button("حظر المستخدم", key=f"block_{u_id}"):
-                        c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
+                    if col_no.button(f"❌ رفض وحذف", key=f"rej_{p_id}"):
+                        c.execute("DELETE FROM posts WHERE id=?", (p_id,))
                         conn.commit()
+                        st.warning("تم رفض الفيديو وحذفه.")
                         st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("لا توجد فيديوهات أو منشورات جديدة تنتظر المراجعة.")
+
+        # 2. إدارة وتجميد الحسابات
+        with dev_tab2:
+            st.write("🚫 **قائمة المستخدمين والحظر:**")
+            c.execute("SELECT id, email, role, is_blocked FROM users WHERE role != 'مطور'")
+            users = c.fetchall()
+            
+            if users:
+                for u_id, u_email, u_role, is_blocked in users:
+                    u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
+                    u_col1.write(f"👤 **{u_email}** ({u_role})")
+                    
+                    if is_blocked == 1:
+                        u_col2.error("محظور 🚫")
+                        if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
+                            c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
+                            conn.commit()
+                            st.rerun()
+                    else:
+                        u_col2.success("نشط ✅")
+                        if u_col3.button("حظر المستخدم", key=f"block_{u_id}"):
+                            c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
+                            conn.commit()
+                            st.rerun()
         
     conn.close()
 
