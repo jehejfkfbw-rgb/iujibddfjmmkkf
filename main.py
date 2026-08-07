@@ -153,7 +153,6 @@ def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
     st.session_state.user_role = role
-    # حفظ الكوكيز لمدة 30 يوم
     cookie_manager.set("saved_phone", phone, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
     cookie_manager.set("saved_role", role, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
 
@@ -169,7 +168,6 @@ def logout_user():
 # ==========================================
 @st.fragment
 def display_student_media(teacher_phone):
-    # تحديث هذا الجزء فقط كل 5 ثواني للطالب ليظهر الفيديو فور نشره
     st_autorefresh(interval=5000, key=f"refresh_media_{teacher_phone}")
     
     conn = sqlite3.connect(DB_NAME)
@@ -192,7 +190,6 @@ def display_student_media(teacher_phone):
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
-    # تحديث جزء طلبات الطلاب كل 5 ثواني للأستاذ
     st_autorefresh(interval=5000, key=f"refresh_subs_{teacher_phone}")
     
     conn = sqlite3.connect(DB_NAME)
@@ -386,7 +383,6 @@ else:
                         """
                         components.html(stream_html, height=450)
                     with tab_media:
-                        # استدعاء دالة التحديث التلقائي هنا
                         display_student_media(t_phone)
                         
                 elif sub_status and sub_status[0] == 'pending':
@@ -454,7 +450,6 @@ else:
 
         with tab_subs:
             st.write("📋 **الطلاب المتقدمين:**")
-            # استدعاء دالة التحديث التلقائي لطلبات الطلاب
             display_teacher_requests(st.session_state.user_phone)
 
         with tab_prof:
