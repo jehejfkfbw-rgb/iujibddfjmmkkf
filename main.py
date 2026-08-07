@@ -17,7 +17,7 @@ def hash_password(password):
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # جدول المستخدمين الشامل (طلاب، أساتذة)
+    # جدول المستخدمين الشامل (طلاب، أساتذة، مطور)
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
