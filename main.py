@@ -110,7 +110,6 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)''')
     
-    # تحديث الكود السري ليكون 90100 دائماً وتحديث القديم إن وجد
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
     
     conn.commit()
@@ -582,7 +581,9 @@ else:
                             st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
                         else:
                             hashed_tp = hash_password(new_t_pass)
-                            c.execute("INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, ?, ?, 'جميع المراحل', 30, ?, '', ?)",
+                            # تم إصلاح التوافق الكامل مع كافة أعمدة جدول الأساتذة هنا
+                            c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
+                                         VALUES (?, ?, ?, ?, 'جميع المراحل', 30, ?, '', ?)""",
                                       (new_t_phone, hashed_tp, new_t_name, new_t_sub, new_t_price, f"room_{new_t_phone}"))
                             c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                             conn.commit()
