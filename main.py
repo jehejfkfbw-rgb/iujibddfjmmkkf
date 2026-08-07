@@ -126,7 +126,7 @@ def init_db():
         if "room_id" not in existing_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
-        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '1900')")
         conn.commit()
 
 init_db()
@@ -158,22 +158,9 @@ if "is_logged_in" not in st.session_state:
     saved_role = cookie_controller.get('nova_role')
     
     if saved_phone and saved_role:
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT is_blocked FROM users WHERE phone=?", (saved_phone,))
-                row = c.fetchone()
-            
-            if row and row[0] == 0:
-                st.session_state.is_logged_in = True
-                st.session_state.user_phone = saved_phone
-                st.session_state.user_role = saved_role
-            else:
-                st.session_state.is_logged_in = False
-                st.session_state.user_phone = ""
-                st.session_state.user_role = None
-        except:
-            st.session_state.is_logged_in = False
+        st.session_state.is_logged_in = True
+        st.session_state.user_phone = saved_phone
+        st.session_state.user_role = saved_role
     else:
         st.session_state.is_logged_in = False
         st.session_state.user_phone = ""
@@ -279,49 +266,46 @@ if not st.session_state.is_logged_in:
                 s_name = st.text_input("الاسم الكامل:")
                 s_email = st.text_input("البريد الإلكتروني:")
                 s_pass = st.text_input("كلمة المرور:", type="password")
-                s_phone = st.text_input("رقم التليفون:")
+                s_phone = st.text_input("رقم المحمول:")
                 s_age = st.text_input("السن:")
                 s_grade = st.text_input("المرحلة الدراسية:")
                 s_signup_btn = st.form_submit_button("تسجيل الحساب")
                 
                 if s_signup_btn:
-                    if s_email and s_pass and s_phone:
+                    if s_pass and s_phone:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("SELECT id FROM users WHERE email=? OR phone=?", (s_email, s_phone))
+                                c.execute("SELECT id FROM users WHERE phone=?", (s_phone,))
                                 if c.fetchone():
-                                    st.error("🚫 البريد الإلكتروني أو رقم الهاتف مسجل مسبقاً!")
+                                    st.error("🚫 رقم المحمول مسجل مسبقاً في السيستم!")
                                 else:
                                     hashed_pass = hash_password(s_pass)
-                                    if s_email.strip() == "jehejfkfbw@gmail.com":
-                                        st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
-                                    
                                     c.execute("INSERT INTO users (phone, email, password, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, ?, ?, 'طالب', 0)", 
                                               (s_phone, s_email, hashed_pass, s_name if s_name else "طالب", s_age, s_grade))
                                     conn.commit()
                                     login_user(s_phone, "طالب")
-                                    st.success("تم التسجيل بنجاح!")
+                                    st.success("تم حفظ الطالب في السيستم وتسجيل الدخول بنجاح!")
                                     st.rerun()
                         except:
                             st.error("حدث خطأ أثناء التسجيل، تأكد من صحة البيانات.")
                     else:
-                        st.error("يرجى ملء الحقول الأساسية بدقة!")
+                        st.error("يرجى إدخال رقم المحمول وكلمة المرور على الأقل!")
         
         else:
             with st.form("student_login"):
                 st.subheader("تسجيل دخول الطالب")
-                s_email_in = st.text_input("البريد الإلكتروني أو الهاتف:")
+                s_phone_in = st.text_input("رقم المحمول:")
                 s_pass_in = st.text_input("كلمة المرور:", type="password")
                 s_login_btn = st.form_submit_button("دخول")
                 
                 if s_login_btn:
-                    if s_email_in and s_pass_in:
+                    if s_phone_in and s_pass_in:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
                                 hashed_pass = hash_password(s_pass_in)
-                                c.execute("SELECT phone, is_blocked FROM users WHERE (email=? OR phone=?) AND password=? AND role='طالب'", (s_email_in, s_email_in, hashed_pass))
+                                c.execute("SELECT phone, is_blocked FROM users WHERE phone=? AND password=? AND role='طالب'", (s_phone_in, hashed_pass))
                                 user_row = c.fetchone()
                             
                             if user_row:
@@ -329,17 +313,15 @@ if not st.session_state.is_logged_in:
                                 if is_blocked == 1:
                                     st.error("🚫 هذا الحساب محظور حالياً!")
                                 else:
-                                    if s_email_in.strip() == "jehejfkfbw@gmail.com":
-                                        st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
                                     login_user(p_val, "طالب")
                                     st.success("تم الدخول بنجاح!")
                                     st.rerun()
                             else:
-                                st.error("🚫 هذه البيانات غير موجودة أو كلمة المرور خطأ!")
+                                st.error("🚫 رقم المحمول أو كلمة المرور غير صحيحة!")
                         except:
-                            st.error("🚫 هذه البيانات غير موجودة في النظام!")
+                            st.error("🚫 حدث خطأ أثناء تسجيل الدخول!")
                     else:
-                        st.error("يرجى إدخال البيانات المطلوبة!")
+                        st.error("يرجى إدخال رقم المحمول وكلمة المرور!")
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif role_choice == "أستاذ 👨‍🏫":
@@ -351,52 +333,53 @@ if not st.session_state.is_logged_in:
             with st.form("teacher_signup"):
                 st.subheader("إنشاء حساب أستاذ جديد")
                 t_name_reg = st.text_input("اسم الأستاذ:")
-                t_phone_reg = st.text_input("رقم التليفون:")
-                t_pass_reg = st.text_input("كلمة المرور:", type="password")
+                t_phone_reg = st.text_input("رقم المحمول:")
                 t_sub_reg = st.text_input("المادة الدراسية:")
-                t_secret_code = st.text_input("كود التسجيل السري:", type="password")
-                t_signup_btn = st.form_submit_button("إنشاء الحساب")
+                t_secret_code = st.text_input("الكود السري (1900):", type="password")
+                t_signup_btn = st.form_submit_button("إنشاء الحساب وحفظه في السيستم")
                 
                 if t_signup_btn:
-                    correct_teacher_code = get_setting("teacher_secret", "90100")
+                    correct_teacher_code = get_setting("teacher_secret", "1900")
                     if t_secret_code.strip() != correct_teacher_code:
-                        st.error("🚫 كود التسجيل السري خطأ تماماً!")
-                    elif t_phone_reg and t_pass_reg:
+                        st.error("🚫 الكود السري غير صحيح!")
+                    elif t_phone_reg and t_name_reg:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
                                 c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
                                 if c.fetchone():
-                                    st.error("🚫 رقم التليفون مسجل مسبقاً لأستاذ آخر!")
+                                    st.error("🚫 رقم المحمول مسجل مسبقاً لأستاذ آخر في السيستم!")
                                 else:
-                                    hashed_t_pass = hash_password(t_pass_reg)
+                                    hashed_t_pass = hash_password(t_secret_code)
                                     c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
                                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
-                                              (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
-                                    c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
+                                              (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
+                                    c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
                                     conn.commit()
                                     login_user(t_phone_reg, "أستاذ")
-                                    st.success("تم الحفظ والدخول بنجاح!")
+                                    st.success("تم حفظ الأستاذ في السيستم وتسجيل الدخول بنجاح!")
                                     st.rerun()
                         except:
                             st.error("حدث خطأ أثناء حفظ البيانات.")
                     else:
-                        st.error("أدخل رقم الهاتف وكلمة المرور والكود السري!")
+                        st.error("أدخل اسم الأستاذ ورقم المحمول والكود السري!")
         
         else:
             with st.form("teacher_login"):
                 st.subheader("تسجيل دخول الأستاذ")
-                t_phone_in = st.text_input("رقم التليفون:")
-                t_pass_in = st.text_input("كلمة المرور:", type="password")
+                t_phone_in = st.text_input("رقم المحمول:")
+                t_secret_in = st.text_input("الكود السري (1900):", type="password")
                 t_login_btn = st.form_submit_button("دخول الأستاذ")
                 
                 if t_login_btn:
-                    if t_phone_in and t_pass_in:
+                    correct_teacher_code = get_setting("teacher_secret", "1900")
+                    if t_secret_in.strip() != correct_teacher_code:
+                        st.error("🚫 الكود السري غير صحيح!")
+                    elif t_phone_in:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                hashed_t_pass = hash_password(t_pass_in)
-                                c.execute("SELECT phone FROM teachers WHERE phone=? AND password=?", (t_phone_in, hashed_t_pass))
+                                c.execute("SELECT phone FROM teachers WHERE phone=?", (t_phone_in,))
                                 t_row = c.fetchone()
                             
                             if t_row:
@@ -404,11 +387,11 @@ if not st.session_state.is_logged_in:
                                 st.success("تم الدخول بنجاح!")
                                 st.rerun()
                             else:
-                                st.error("🚫 هذه البيانات غير موجودة أو رقم الهاتف/كلمة المرور غير صحيحة!")
+                                st.error("🚫 رقم المحمول غير مسجل كأستاذ في السيستم!")
                         except:
-                            st.error("🚫 رقم الهاتف أو كلمة المرور غير صحيحة!")
+                            st.error("🚫 حدث خطأ أثناء تسجيل الدخول!")
                     else:
-                        st.error("يرجى إدخال رقم الهاتف وكلمة المرور!")
+                        st.error("يرجى إدخال رقم المحمول والكود السري!")
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif role_choice == "مطور 👑":
@@ -439,7 +422,7 @@ else:
     # واجهة الطالب
     # ------------------------------------------
     if st.session_state.user_role == "طالب":
-        st.subheader("🎓 الأساتذة المتاحون")
+        st.subheader("🎓 الأساتذة المتاحون في السيستم")
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
             c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
@@ -490,7 +473,7 @@ else:
                         st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.info("لا يوجد أساتذة مسجلون حالياً.")
+            st.info("لا يوجد أساتذة مسجلون حالياً في السيستم.")
 
     # ------------------------------------------
     # واجهة الأستاذ
@@ -587,36 +570,35 @@ else:
                 st.info("لا يوجد محتوى معلق للمراجعة.")
 
         with dev_tab2:
-            st.write("➕ **إضافة أستاذ جديد:**")
+            st.write("➕ **إضافة أستاذ جديد للسيستم:**")
             with st.form("add_teacher_dev"):
                 new_t_name = st.text_input("اسم الأستاذ:")
-                new_t_phone = st.text_input("رقم الهاتف:")
-                new_t_pass = st.text_input("كلمة المرور:", type="password")
+                new_t_phone = st.text_input("رقم المحمول:")
                 new_t_sub = st.text_input("المادة الدراسية:")
                 new_t_price = st.number_input("سعر الاشتراك (جـ):", value=100.0)
-                add_t_btn = st.form_submit_button("إضافة الأستاذ فوراً")
+                add_t_btn = st.form_submit_button("إضافة الأستاذ فوراً للسيستم")
                 
                 if add_t_btn:
-                    if new_t_phone and new_t_pass and new_t_name:
+                    if new_t_phone and new_t_name:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
                             c.execute("SELECT id FROM teachers WHERE phone=?", (new_t_phone,))
                             if c.fetchone():
-                                st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
+                                st.error("رقم المحمول مسجل مسبقاً لأستاذ آخر في السيستم!")
                             else:
-                                hashed_tp = hash_password(new_t_pass)
+                                hashed_tp = hash_password("1900")
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
                                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                           (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                                 conn.commit()
-                                st.success("تم إضافة الأستاذ بنجاح!")
+                                st.success("تم حفظ الأستاذ في السيستم بنجاح!")
                                 st.rerun()
                     else:
-                        st.error("يرجى إكمال البيانات الأساسية للأستاذ.")
+                        st.error("يرجى إكمال اسم الأستاذ ورقم المحمول.")
 
             st.write("---")
-            st.write("📋 **الأساتذة الحاليون:**")
+            st.write("📋 **الأساتذة المحفوظون في السيستم:**")
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
                 c.execute("SELECT id, name, phone, subject, price FROM teachers")
@@ -624,7 +606,7 @@ else:
             
             if all_teachers:
                 for t_id, t_n, t_p, t_s, t_pr in all_teachers:
-                    st.write(f"👨‍🏫 **{t_n}** | المادة: {t_s} | الهاتف: `{t_p}` | السعر: {t_pr} جـ")
+                    st.write(f"👨‍🏫 **{t_n}** | المادة: {t_s} | المحمول: `{t_p}` | السعر: {t_pr} جـ")
                     if st.button(f"🗑️ حذف الأستاذ {t_n}", key=f"del_t_{t_id}"):
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
@@ -644,8 +626,8 @@ else:
             
             if users:
                 for u_id, u_phone, u_email, u_name, u_role, is_blocked in users:
-                    ident = u_email if u_email else u_phone
-                    st.write(f"👤 {u_name} ({u_role}) - {ident}")
+                    ident = u_phone if u_phone else u_email
+                    st.write(f"👤 {u_name} ({u_role}) - المحمول: `{ident}`")
                     if is_blocked == 1:
                         if st.button(f"فك حظر", key=f"unblock_{u_id}"):
                             with sqlite3.connect(DB_NAME) as conn:
@@ -661,17 +643,17 @@ else:
                                 conn.commit()
                             st.rerun()
             else:
-                st.info("لا يوجد مستخدمون مسجلون.")
+                st.info("لا يوجد مستخدمون مسجلون في السيستم.")
 
         with dev_tab4:
             st.write("⚙️ **إعدادات المنصة:**")
-            current_secret = get_setting("teacher_secret", "90100")
+            current_secret = get_setting("teacher_secret", "1900")
             with st.form("settings_form"):
                 new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret)
                 save_settings_btn = st.form_submit_button("حفظ التغييرات")
                 if save_settings_btn:
                     update_setting("teacher_secret", new_secret_input.strip())
-                    st.success("تم تحديث كود التسجيل السري بنجاح!")
+                    st.success("تم تحديث الكود السري بنجاح!")
                     st.rerun()
 
 st.write("---")
