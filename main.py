@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import sqlite3
 import os
 
@@ -7,7 +6,7 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_ultimate_v1.db'
+DB_NAME = 'nova_secure_v2.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -113,49 +112,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# استخدام الذاكرة الداخلية لـ Streamlit لتثبيت الجلسة فوراً وبدون تأخير
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_phone = ""
 
-auto_login_js = """
-<script>
-    const savedPhone = localStorage.getItem("nova_phone");
-    const savedRole = localStorage.getItem("nova_role");
-    if (savedPhone && savedRole && !window.location.search.includes("autologin=1")) {
-        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent(savedPhone) + "&role=" + encodeURIComponent(savedRole);
-    }
-</script>
-"""
-components.html(auto_login_js, height=0)
-
-q_params = st.query_params
-if not st.session_state.is_logged_in and q_params.get("autologin") == "1":
-    p_phone = q_params.get("phone")
-    p_role = q_params.get("role")
-    if p_phone and p_role:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("SELECT is_blocked FROM users WHERE phone=?", (p_phone,))
-        res = c.fetchone()
-        conn.close()
-        if not res or res[0] == 0:
-            st.session_state.is_logged_in = True
-            st.session_state.user_phone = p_phone
-            st.session_state.user_role = p_role
-
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    role_choice = st.radio("اختر صففتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    role_choice = st.radio("اختر صفتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 تسجيـل الطالـب (مرة واحدة فقط)")
+        st.subheader("👨‍🎓 دخول الطالب (تسجيل لأول مرة)")
         with st.form("student_reg"):
             s_phone = st.text_input("رقم التليفون:")
-            s_name = st.text_input("الاسم:")
+            s_name = st.text_input("الاسم الكامل:")
             s_grade = st.text_input("سنتك كام (المرحلة الدراسية):")
             s_btn = st.form_submit_button("دخول المنصة")
             
@@ -175,21 +149,13 @@ if not st.session_state.is_logged_in:
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = s_phone
                         st.session_state.user_role = "طالب"
-
-                        set_js = f"""
-                        <script>
-                            localStorage.setItem("nova_phone", "{s_phone}");
-                            localStorage.setItem("nova_role", "طالب");
-                            window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{s_phone}") + "&role=طالب";
-                        </script>
-                        """
-                        components.html(set_js, height=0)
+                        st.success("تم الدخول بنجاح!")
                         st.rerun()
                 else:
                     st.error("يرجى إدخال رقم التليفون والاسم!")
 
     elif role_choice == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري 90100)")
+        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري فقط 90100)")
         with st.form("teacher_reg"):
             t_phone = st.text_input("رقم التليفون:")
             t_name = st.text_input("الاسم:")
@@ -214,21 +180,13 @@ if not st.session_state.is_logged_in:
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = t_phone
                         st.session_state.user_role = "أستاذ"
-
-                        set_js = f"""
-                        <script>
-                            localStorage.setItem("nova_phone", "{t_phone}");
-                            localStorage.setItem("nova_role", "أستاذ");
-                            window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{t_phone}") + "&role=أستاذ";
-                        </script>
-                        """
-                        components.html(set_js, height=0)
+                        st.success("أهلاً بك يا استاذنا!")
                         st.rerun()
                 else:
-                    st.error("الكود السري غير صحيح (الكود هو 90100) أو رقم التليفون فارغ!")
+                    st.error("الكود السري خطأ (الكود هو 90100) أو رقم التليفون فارغ!")
 
     elif role_choice == "مطور 👑":
-        st.subheader("👑 دخول المطور (بالكود السري 900800)")
+        st.subheader("👑 دخول المطور (بالكود السري فقط 900800)")
         with st.form("dev_reg"):
             dev_code = st.text_input("الكود السري للمطور:", type="password")
             dev_btn = st.form_submit_button("دخول لوحة المطور")
@@ -238,32 +196,18 @@ if not st.session_state.is_logged_in:
                     st.session_state.is_logged_in = True
                     st.session_state.user_phone = "dev_admin"
                     st.session_state.user_role = "مطور"
-
-                    set_js = f"""
-                    <script>
-                        localStorage.setItem("nova_phone", "dev_admin");
-                        localStorage.setItem("nova_role", "مطور");
-                        window.location.href = window.location.pathname + "?autologin=1&phone=dev_admin&role=مطور";
-                    </script>
-                    """
-                    components.html(set_js, height=0)
+                    st.success("أهلاً بك يا مطورنا!")
                     st.rerun()
                 else:
-                    st.error("الكود السري للمطور غير صحيح (الكود هو 900800)!")
+                    st.error("الكود السري للمطور خطأ (الكود هو 900800)!")
 
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}**")
-    if logout_col.button("🚪 خروج"):
-        clear_js = """
-        <script>
-            localStorage.removeItem("nova_phone");
-            localStorage.removeItem("nova_role");
-            window.location.href = window.location.pathname;
-        </script>
-        """
-        components.html(clear_js, height=0)
+    if logout_col.button("🚪 تسجيـل الخروج"):
         st.session_state.is_logged_in = False
+        st.session_state.user_role = None
+        st.session_state.user_phone = ""
         st.rerun()
 
     conn = sqlite3.connect(DB_NAME)
