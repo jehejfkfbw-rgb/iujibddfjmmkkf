@@ -112,13 +112,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# نظام استرجاع الجلسة التلقائي عبر الـ LocalStorage برمجياً
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
 
-# حقن كود جافاسكريبت لقراءة وفحص التخزين المحلي للمتصفح تلقائياً
 local_storage_check = """
 <script>
     const savedEmail = localStorage.getItem("nova_email");
@@ -150,7 +148,6 @@ def save_login(email, role):
     st.session_state.is_logged_in = True
     st.session_state.user_email = email
     st.session_state.user_role = role
-    # حفظ الدخول في ذاكرة المتصفح دائمياً وإعادة التوجيه
     save_script = f"""
     <script>
         localStorage.setItem("nova_email", "{email}");
