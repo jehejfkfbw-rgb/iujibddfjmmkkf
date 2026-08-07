@@ -4,22 +4,26 @@ import os
 import streamlit.components.v1 as components
 import hashlib
 
-# إعداد المجلدات والملفات لضمان استقرار وحفظ البيانات
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
 DB_NAME = 'nova_complete_system.db'
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
+# تحديث تلقائي لجهاز أو سيرفر ستريملت لإعادة بناء قاعدة البيانات إذا كانت قديمة أو تالفة
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # جدول المستخدمين الشامل (طلاب، أساتذة، مطور)
+    
+    # حذف الجداول القديمة تماماً لضمان عدم حدوث أي تعارض في الأعمدة
+    c.execute('DROP TABLE IF EXISTS users')
+    c.execute('DROP TABLE IF EXISTS teachers')
+    c.execute('DROP TABLE IF EXISTS subscriptions')
+    c.execute('DROP TABLE IF EXISTS posts')
+
+    # إنشاء الجداول بالشكل الصحيح 100%
     c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT UNIQUE,
             email TEXT UNIQUE,
@@ -31,9 +35,8 @@ def init_db():
             is_blocked INTEGER DEFAULT 0
         )
     ''')
-    # جدول تفاصيل الأساتذة
     c.execute('''
-        CREATE TABLE IF NOT EXISTS teachers (
+        CREATE TABLE teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT UNIQUE,
             name TEXT,
@@ -45,9 +48,8 @@ def init_db():
             room_id TEXT
         )
     ''')
-    # جدول اشتراكات الطلاب مع الأساتذة
     c.execute('''
-        CREATE TABLE IF NOT EXISTS subscriptions (
+        CREATE TABLE subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_phone TEXT,
             teacher_phone TEXT,
@@ -55,9 +57,8 @@ def init_db():
             UNIQUE(student_phone, teacher_phone)
         )
     ''')
-    # جدول المنشورات والفيديوهات
     c.execute('''
-        CREATE TABLE IF NOT EXISTS posts (
+        CREATE TABLE posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_phone TEXT,
             title TEXT,
@@ -71,7 +72,9 @@ def init_db():
 
 init_db()
 
-# إخفاء شريط التحميل العلوي وكل أزرار ستريملت ليبدو كتطبيق حقيقي تماماً
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -131,7 +134,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# إدارة الجلسة لحفظ حالة الدخول وتفعيل خاصية "تسجيل الدخول مرة واحدة" عبر الـ query_params
 query_params = st.query_params
 
 if "is_logged_in" not in st.session_state:
