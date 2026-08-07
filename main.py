@@ -10,20 +10,13 @@ if not os.path.exists(MEDIA_DIR):
 
 DB_NAME = 'nova_complete_system.db'
 
-# تحديث تلقائي لجهاز أو سيرفر ستريملت لإعادة بناء قاعدة البيانات إذا كانت قديمة أو تالفة
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     
-    # حذف الجداول القديمة تماماً لضمان عدم حدوث أي تعارض في الأعمدة
-    c.execute('DROP TABLE IF EXISTS users')
-    c.execute('DROP TABLE IF EXISTS teachers')
-    c.execute('DROP TABLE IF EXISTS subscriptions')
-    c.execute('DROP TABLE IF EXISTS posts')
-
-    # إنشاء الجداول بالشكل الصحيح 100%
+    # إنشاء الجداول الأساسية إذا لم تكن موجودة لضمان بقاء جميع البيانات وعدم ضياعها
     c.execute('''
-        CREATE TABLE users (
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT UNIQUE,
             email TEXT UNIQUE,
@@ -36,7 +29,7 @@ def init_db():
         )
     ''')
     c.execute('''
-        CREATE TABLE teachers (
+        CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT UNIQUE,
             name TEXT,
@@ -49,7 +42,7 @@ def init_db():
         )
     ''')
     c.execute('''
-        CREATE TABLE subscriptions (
+        CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_phone TEXT,
             teacher_phone TEXT,
@@ -58,7 +51,7 @@ def init_db():
         )
     ''')
     c.execute('''
-        CREATE TABLE posts (
+        CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_phone TEXT,
             title TEXT,
@@ -188,7 +181,7 @@ if not st.session_state.is_logged_in:
                         c.execute("SELECT id FROM users WHERE email=? OR phone=?", (s_email, s_phone))
                         exists = c.fetchone()
                         if exists:
-                            st.error("🚫 البريد الإلكتروني أو رقم التليفون مستخدم من قبل!")
+                            st.error("🚫 البريد الإلكتروني أو رقم التليفون مسجل من قبل!")
                             conn.close()
                         else:
                             hashed_pass = hash_password(s_pass)
@@ -209,7 +202,7 @@ if not st.session_state.is_logged_in:
                     else:
                         st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور ورقم التليفون على الأقل!")
         else:
-            st.subheader("👨‍🎓 تسجيل دخول الطالب")
+            st.subheader("👨‍🎓 تسجيل دخول الطالب (بالبريد الإلكتروني وكلمة المرور فقط)")
             with st.form("student_login"):
                 s_email_in = st.text_input("البريد الإلكتروني:")
                 s_pass_in = st.text_input("كلمة المرور:", type="password")
@@ -261,7 +254,7 @@ if not st.session_state.is_logged_in:
                     if u_stat and u_stat[0] == 1:
                         st.error("🚫 هذا الحساب محظور!")
                     else:
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone, t_name))
+                        c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone, t_name if t_name else "أستاذ"))
                         c.execute("INSERT OR IGNORE INTO teachers (phone, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
                                   (t_phone, t_name if t_name else "أستاذ", f"room_{t_phone}"))
                         conn.commit()
