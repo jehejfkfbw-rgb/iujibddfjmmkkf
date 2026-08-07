@@ -2,16 +2,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sqlite3
 import os
-from streamlit_cookies_controller import CookieController
 
-# ==================== 1. إعداد المتحكم وملفات الارتباط ====================
-controller = CookieController()
-
+# ==================== 1. إعداد مجلد الملفات ====================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-# ==================== 2. إعداد قاعدة البيانات الدائمة ====================
+# ==================== 2. إعداد قاعدة البيانات ====================
 DB_NAME = 'nova_persistent_v13.db'
 
 def init_db():
@@ -63,7 +60,7 @@ def init_db():
 
 init_db()
 
-# ==================== 3. التصميم والواجهة ====================
+# ==================== 3. الواجهة والتصميم ====================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide")
 
 st.markdown("""
@@ -118,40 +115,42 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 4. إدارة الجلسة عبر الكوكيز الحقيقية ====================
+# ==================== 4. نظام الجلسة والذاكرة الدائمة عبر الرابط ====================
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
 
-cookie_email = controller.get("nova_user_email")
-cookie_role = controller.get("nova_user_role")
+# جلب البيانات من الـ Query Parameters في الرابط
+query_params = st.query_params
+param_email = query_params.get("email")
+param_role = query_params.get("role")
 
-if not st.session_state.is_logged_in and cookie_email and cookie_role:
+if not st.session_state.is_logged_in and param_email and param_role:
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT is_blocked FROM users WHERE email=?", (cookie_email,))
+    c.execute("SELECT is_blocked FROM users WHERE email=?", (param_email,))
     res = c.fetchone()
     conn.close()
     
     if not res or res[0] == 0:
         st.session_state.is_logged_in = True
-        st.session_state.user_email = cookie_email
-        st.session_state.user_role = cookie_role
+        st.session_state.user_email = param_email
+        st.session_state.user_role = param_role
 
 def save_login(email, role):
     st.session_state.is_logged_in = True
     st.session_state.user_email = email
     st.session_state.user_role = role
-    controller.set("nova_user_email", email, max_age=31536000)
-    controller.set("nova_user_role", role, max_age=31536000)
+    # حقن البيانات مباشرة في الرابط لتثبيتها في المتصفح
+    st.query_params["email"] = email
+    st.query_params["role"] = role
 
 def logout():
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
-    controller.remove("nova_user_email")
-    controller.remove("nova_user_role")
+    st.query_params.clear()
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
