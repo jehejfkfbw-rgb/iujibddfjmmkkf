@@ -377,8 +377,8 @@ if not st.session_state.is_logged_in:
                             else:
                                 hashed_t_pass = hash_password(t_pass_reg)
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                             VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100.0, '', ?)""", 
-                                          (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", f"room_{t_phone_reg}"))
+                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
+                                          (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
                                 conn.commit()
                                 login_user(t_phone_reg, "أستاذ")
