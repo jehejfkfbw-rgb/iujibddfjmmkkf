@@ -111,7 +111,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
         
-        # التأكد من وجود كافة الأعمدة في جدول users لعدم حدوث أخطاء
+        # التأكد من وجود كافة الأعمدة في جدول users
         user_columns = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
         if "age" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''")
@@ -122,17 +122,19 @@ def init_db():
         if "is_blocked" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
 
-        # التأكد من وجود كافة الأعمدة في جدول teachers
-        existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
-        if "grade_level" not in existing_columns:
+        # التأكد من وجود كافة الأعمدة في جدول teachers بما فيها password
+        teacher_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
+        if "password" not in teacher_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN password TEXT DEFAULT ''")
+        if "grade_level" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
-        if "age" not in existing_columns:
+        if "age" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN age INTEGER DEFAULT 30")
-        if "price" not in existing_columns:
+        if "price" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN price REAL DEFAULT 100.0")
-        if "image_url" not in existing_columns:
+        if "image_url" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN image_url TEXT DEFAULT ''")
-        if "room_id" not in existing_columns:
+        if "room_id" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '901000')")
