@@ -110,7 +110,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)''')
     
-    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '123456')")
+    # تم تحديث الكود السري الافتراضي هنا إلى 90100
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
     
     conn.commit()
     conn.close()
@@ -351,7 +352,7 @@ if not st.session_state.is_logged_in:
                 t_signup_btn = st.form_submit_button("إنشاء الحساب")
                 
                 if t_signup_btn:
-                    correct_teacher_code = get_setting("teacher_secret", "123456")
+                    correct_teacher_code = get_setting("teacher_secret", "90100")
                     if t_secret_code.strip() != correct_teacher_code:
                         st.error("🚫 كود التسجيل السري خطأ تماماً!")
                     elif t_phone_reg and t_pass_reg:
@@ -628,7 +629,7 @@ else:
 
         with dev_tab4:
             st.write("⚙️ **إعدادات المنصة:**")
-            current_secret = get_setting("teacher_secret", "123456")
+            current_secret = get_setting("teacher_secret", "90100")
             with st.form("settings_form"):
                 new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret)
                 save_settings_btn = st.form_submit_button("حفظ التغييرات")
