@@ -80,7 +80,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. إعداد قاعدة البيانات والملفات
+# 2. إعداد قاعدة البيانات وتحديث الأعمدة تلقائياً
 # ==========================================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
@@ -91,6 +91,7 @@ DB_NAME = 'nova_complete_system.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, email TEXT UNIQUE,
         password TEXT, name TEXT, age TEXT, grade TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
@@ -110,6 +111,19 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)''')
     
+    # التأكد من وجود الأعمدة المطلوبة في جدول teachers حتى لو القاعدة قديمة
+    existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
+    if "grade_level" not in existing_columns:
+        c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
+    if "age" not in existing_columns:
+        c.execute("ALTER TABLE teachers ADD COLUMN age INTEGER DEFAULT 30")
+    if "price" not in existing_columns:
+        c.execute("ALTER TABLE teachers ADD COLUMN price REAL DEFAULT 100.0")
+    if "image_url" not in existing_columns:
+        c.execute("ALTER TABLE teachers ADD COLUMN image_url TEXT DEFAULT ''")
+    if "room_id" not in existing_columns:
+        c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
+
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
     
     conn.commit()
@@ -581,7 +595,6 @@ else:
                             st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
                         else:
                             hashed_tp = hash_password(new_t_pass)
-                            # تم إصلاح التوافق الكامل مع كافة أعمدة جدول الأساتذة هنا
                             c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
                                          VALUES (?, ?, ?, ?, 'جميع المراحل', 30, ?, '', ?)""",
                                       (new_t_phone, hashed_tp, new_t_name, new_t_sub, new_t_price, f"room_{new_t_phone}"))
