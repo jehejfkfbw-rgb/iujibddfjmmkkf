@@ -1,3 +1,3 @@
 streamlit
-streamlit-authenticator
-Pillow
+extra-streamlit-components
+streamlit-autorefresh
