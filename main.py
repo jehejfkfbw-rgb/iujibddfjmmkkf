@@ -7,7 +7,7 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_student_v5.db'
+DB_NAME = 'nova_app_v7.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -60,10 +60,17 @@ def init_db():
 
 init_db()
 
-st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide")
+# إخفاء شريط التحميل العلوي، الـ Header، والـ Footer الخاص بـ Streamlit تماماً ليكون كأنه تطبيق حقيقي
+st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
+    /* إخفاء شريط التحميل العلوي (Running animation) وواجهة ستريملت بالكامل */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display: none;}
+    
     .stApp {
         direction: rtl;
         text-align: right;
@@ -123,39 +130,44 @@ st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    role_choice = st.radio("اختر صفتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    role_choice = st.radio("اختر صفتك في التطبيق:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 تسجيـل الطالـب (مرة واحدة فقط)")
+        st.subheader("👨‍🎓 تسجيل أو دخول الطالب")
         with st.form("student_reg"):
             s_phone = st.text_input("رقم التليفون:")
-            s_name = st.text_input("الاسم الكامل:")
-            s_age = st.text_input("عنده كم سنة؟:")
-            s_grade = st.text_input("المرحلة الدراسية:")
-            s_btn = st.form_submit_button("دخول المنصة")
+            s_name = st.text_input("الاسم الكامل (لو أول مرة):")
+            s_age = st.text_input("عنده كم سنة؟ (لو أول مرة):")
+            s_grade = st.text_input("المرحلة الدراسية (لو أول مرة):")
+            s_btn = st.form_submit_button("دخول التطبيق")
             
             if s_btn:
-                if s_phone and s_name and s_age and s_grade:
+                if s_phone:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("SELECT is_blocked FROM users WHERE phone=?", (s_phone,))
-                    u_stat = c.fetchone()
-                    if u_stat and u_stat[0] == 1:
+                    c.execute("SELECT role, is_blocked FROM users WHERE phone=?", (s_phone,))
+                    existing_user = c.fetchone()
+                    
+                    if existing_user and existing_user[1] == 1:
                         st.error("🚫 هذا الحساب محظور من قبل المطور!")
                     else:
+                        final_name = s_name if s_name else "طالب"
+                        final_age = s_age if s_age else "غير محدد"
+                        final_grade = s_grade if s_grade else "غير محدد"
+                        
                         c.execute("INSERT OR REPLACE INTO users (phone, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, 'طالب', 0)", 
-                                  (s_phone, s_name, s_age, s_grade))
+                                  (s_phone, final_name, final_age, final_grade))
                         conn.commit()
                         conn.close()
 
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = s_phone
                         st.session_state.user_role = "طالب"
-                        st.success("تم تسجيل الدخول بنجاح ولن تحتاج لإعادته!")
+                        st.success("تم الدخول بنجاح!")
                         st.rerun()
                 else:
-                    st.error("يرجى إكمال جميع بيانات الطالب!")
+                    st.error("يرجى إدخال رقم التليفون!")
 
     elif role_choice == "أستاذ 👨‍🏫":
         st.subheader("👨‍🏫 دخول الأستاذ")
