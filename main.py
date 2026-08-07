@@ -136,30 +136,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 4. إدارة الجلسة والدخول الدائم ====================
-params = st.query_params
-
+# ==================== 4. إدارة الجلسة والدخول الدائم (المحدث) ====================
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
 
-# التحقق التلقائي من الـ Query Params لتثبيت الدخول مرة واحدة
-if not st.session_state.is_logged_in and "user_email" in params and "user_role" in params:
-    q_email = params["user_email"]
-    q_role = params["user_role"]
-    
-    # التحقق من أن المستخدم غير محظور في قاعدة البيانات
+params = st.query_params
+saved_email = params.get("user_email")
+saved_role = params.get("user_role")
+
+if not st.session_state.is_logged_in and saved_email and saved_role:
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT is_blocked FROM users WHERE email=?", (q_email,))
+    c.execute("SELECT is_blocked FROM users WHERE email=?", (saved_email,))
     res = c.fetchone()
     conn.close()
     
     if not res or res[0] == 0:
         st.session_state.is_logged_in = True
-        st.session_state.user_email = q_email
-        st.session_state.user_role = q_role
+        st.session_state.user_email = saved_email
+        st.session_state.user_role = saved_role
 
 def save_login(email, role):
     st.session_state.is_logged_in = True
