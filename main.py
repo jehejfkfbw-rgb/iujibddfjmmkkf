@@ -7,7 +7,7 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_persistent_v14.db'
+DB_NAME = 'nova_persistent_v15.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -15,15 +15,17 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE,
+            phone TEXT UNIQUE,
+            name TEXT,
             role TEXT,
+            grade TEXT,
             is_blocked INTEGER DEFAULT 0
         )
     ''')
     c.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE,
+            phone TEXT UNIQUE,
             name TEXT,
             subject TEXT,
             grade_level TEXT,
@@ -36,16 +38,16 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_email TEXT,
-            teacher_email TEXT,
+            student_phone TEXT,
+            teacher_phone TEXT,
             status TEXT DEFAULT 'pending',
-            UNIQUE(student_email, teacher_email)
+            UNIQUE(student_phone, teacher_phone)
         )
     ''')
     c.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            teacher_email TEXT,
+            teacher_phone TEXT,
             title TEXT,
             media_type TEXT,
             file_path TEXT,
@@ -114,15 +116,14 @@ st.markdown("""
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
-    st.session_state.user_email = ""
+    st.session_state.user_phone = ""
 
-# حقن كود جافاسكريبت قسري لقراءة الـ localStorage وتثبيت الجلسة فوراً
 auto_login_js = """
 <script>
-    const savedEmail = localStorage.getItem("nova_permanent_email");
-    const savedRole = localStorage.getItem("nova_permanent_role");
-    if (savedEmail && savedRole && !window.location.search.includes("autologin=1")) {
-        window.location.href = window.location.pathname + "?autologin=1&email=" + encodeURIComponent(savedEmail) + "&role=" + encodeURIComponent(savedRole);
+    const savedPhone = localStorage.getItem("nova_phone");
+    const savedRole = localStorage.getItem("nova_role");
+    if (savedPhone && savedRole && !window.location.search.includes("autologin=1")) {
+        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent(savedPhone) + "&role=" + encodeURIComponent(savedRole);
     }
 </script>
 """
@@ -130,71 +131,124 @@ components.html(auto_login_js, height=0)
 
 q_params = st.query_params
 if not st.session_state.is_logged_in and q_params.get("autologin") == "1":
-    p_email = q_params.get("email")
+    p_phone = q_params.get("phone")
     p_role = q_params.get("role")
-    if p_email and p_role:
+    if p_phone and p_role:
         st.session_state.is_logged_in = True
-        st.session_state.user_email = p_email
+        st.session_state.user_phone = p_phone
         st.session_state.user_role = p_role
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    st.subheader("🚀 تفعيل الدخول لأول مرة فقط (على هذا الجهاز)")
-    st.info("اكتب بريدك واختار دورك مرة واحدة، ولن يطلب منك تسجيل دخول مرة أخرى أبداً.")
-    
-    with st.form("permanent_login_form"):
-        reg_email = st.text_input("البريد الإلكتروني:")
-        reg_role = st.selectbox("اختر صففتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"])
-        reg_code = st.text_input("كود التحقق (اكتب 777 لو طالب، أو الكود السري لو أستاذ/مطور):", type="password")
-        
-        submitted = st.form_submit_button("دخول وتثبيت الحساب نهائياً")
-        if submitted:
-            clean_role = "طالب"
-            if "أستاذ" in reg_role:
-                clean_role = "أستاذ"
-            elif "مطور" in reg_role:
-                clean_role = "مطور"
-                
-            if reg_email:
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                try:
-                    c.execute("INSERT OR IGNORE INTO users (email, role) VALUES (?, ?)", (reg_email, clean_role))
-                    if clean_role == "أستاذ":
-                        c.execute("INSERT OR IGNORE INTO teachers (email, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
-                                  (reg_email, reg_email.split('@')[0], f"room_{reg_email.split('@')[0]}"))
-                    conn.commit()
-                except:
-                    pass
-                conn.close()
+    role_choice = st.radio("اختر صففتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    st.write("---")
 
-                st.session_state.is_logged_in = True
-                st.session_state.user_email = reg_email
-                st.session_state.user_role = clean_role
-                
-                # كود حفظ دائم في المتصفح وإعادة تحميل الصفحة بالبارامترات
-                set_js = f"""
-                <script>
-                    localStorage.setItem("nova_permanent_email", "{reg_email}");
-                    localStorage.setItem("nova_permanent_role", "{clean_role}");
-                    window.location.href = window.location.pathname + "?autologin=1&email=" + encodeURIComponent("{reg_email}") + "&role=" + encodeURIComponent("{clean_role}");
-                </script>
-                """
-                components.html(set_js, height=0)
-                st.success("تم التثبيت بنجاح! جاري الدخول...")
-                st.rerun()
-            else:
-                st.error("يرجى كتابة البريد الإلكتروني صحيحاً!")
+    if role_choice == "طالب 👨‍🎓":
+        st.subheader("👨‍🎓 تسجيل دخول الطالب (مرة واحدة)")
+        with st.form("student_reg"):
+            s_phone = st.text_input("رقم التليفون:")
+            s_name = st.text_input("الاسم الكامل:")
+            s_grade = st.text_input("سنتك كام (المرحلة الدراسية):")
+            s_btn = st.form_submit_button("دخول المنصة")
+            
+            if s_btn:
+                if s_phone and s_name:
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    try:
+                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, grade) VALUES (?, ?, 'طالب', ?)", (s_phone, s_name, s_grade))
+                        conn.commit()
+                    except:
+                        pass
+                    conn.close()
+
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_phone = s_phone
+                    st.session_state.user_role = "طالب"
+
+                    set_js = f"""
+                    <script>
+                        localStorage.setItem("nova_phone", "{s_phone}");
+                        localStorage.setItem("nova_role", "طالب");
+                        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{s_phone}") + "&role=طالب";
+                    </script>
+                    """
+                    components.html(set_js, height=0)
+                    st.rerun()
+                else:
+                    st.error("يرجى إدخال رقم التليفون والاسم على الأقل!")
+
+    elif role_choice == "أستاذ 👨‍🏫":
+        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري)")
+        with st.form("teacher_reg"):
+            t_phone = st.text_input("رقم التليفون:")
+            t_name = st.text_input("الاسم:")
+            t_code = st.text_input("الكود السري (90100):", type="password")
+            t_btn = st.form_submit_button("دخول الأستاذ")
+            
+            if t_btn:
+                if t_code.strip() == "90100" and t_phone:
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    try:
+                        c.execute("INSERT OR REPLACE INTO users (phone, name, role) VALUES (?, ?, 'أستاذ')", (t_phone, t_name))
+                        c.execute("INSERT OR IGNORE INTO teachers (phone, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
+                                  (t_phone, t_name if t_name else "أستاذ", f"room_{t_phone}"))
+                        conn.commit()
+                    except:
+                        pass
+                    conn.close()
+
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_phone = t_phone
+                    st.session_state.user_role = "أستاذ"
+
+                    set_js = f"""
+                    <script>
+                        localStorage.setItem("nova_phone", "{t_phone}");
+                        localStorage.setItem("nova_role", "أستاذ");
+                        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{t_phone}") + "&role=أستاذ";
+                    </script>
+                    """
+                    components.html(set_js, height=0)
+                    st.rerun()
+                else:
+                    st.error("الكود السري غير صحيح (الكود هو 90100) أو رقم التليفون فارغ!")
+
+    elif role_choice == "مطور 👑":
+        st.subheader("👑 دخول المطور (بالكود السري)")
+        with st.form("dev_reg"):
+            dev_code = st.text_input("الكود السري للمطور (900800):", type="password")
+            dev_btn = st.form_submit_button("دخول لوحة المطور")
+            
+            if dev_btn:
+                if dev_code.strip() == "900800":
+                    st.session_state.is_logged_in = True
+                    st.session_state.user_phone = "01000000000"
+                    st.session_state.user_role = "مطور"
+
+                    set_js = f"""
+                    <script>
+                        localStorage.setItem("nova_phone", "01000000000");
+                        localStorage.setItem("nova_role", "مطور");
+                        window.location.href = window.location.pathname + "?autologin=1&phone=01000000000&role=مطور";
+                    </script>
+                    """
+                    components.html(set_js, height=0)
+                    st.rerun()
+                else:
+                    st.error("الكود السري للمطور غير صحيح (الكود هو 900800)!")
+
 else:
     top_col, logout_col = st.columns([3, 1])
-    top_col.success(f"مرحباً بك: **{st.session_state.user_role}** ({st.session_state.user_email})")
-    if logout_col.button("🚪 مسح التثبيت وخروج"):
+    top_col.success(f"مرحباً بك: **{st.session_state.user_role}** (رقم: {st.session_state.user_phone})")
+    if logout_col.button("🚪 خروج وتغيير الحساب"):
         clear_js = """
         <script>
-            localStorage.removeItem("nova_permanent_email");
-            localStorage.removeItem("nova_permanent_role");
+            localStorage.removeItem("nova_phone");
+            localStorage.removeItem("nova_role");
             window.location.href = window.location.pathname;
         </script>
         """
@@ -207,12 +261,12 @@ else:
 
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 قائمة الأساتذة والمواد الدراسية")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, email FROM teachers")
+        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
         teachers = c.fetchall()
 
         if teachers:
             for t in teachers:
-                t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_email = t
+                t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_phone = t
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 col1, col2 = st.columns([1, 3])
                 with col1:
@@ -225,8 +279,8 @@ else:
                     st.markdown(f"📖 **المادة:** {t_sub} | 🏫 **المرحلة:** {t_grade}")
                     st.markdown(f"🎂 **العمر:** {t_age} سنة | 💰 **سعر الاشتراك:** {t_price} جنيه")
                 
-                c.execute("SELECT status FROM subscriptions WHERE student_email=? AND teacher_email=?", 
-                          (st.session_state.user_email, t_email))
+                c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                          (st.session_state.user_phone, t_phone))
                 sub_status = c.fetchone()
 
                 if sub_status and sub_status[0] == 'active':
@@ -242,7 +296,7 @@ else:
                         """
                         components.html(stream_html, height=450)
                     with tab_media:
-                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=? AND status='approved'", (t_email,))
+                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_phone=? AND status='approved'", (t_phone,))
                         posts = c.fetchall()
                         if posts:
                             for p_title, p_type, p_path in posts:
@@ -262,9 +316,9 @@ else:
                         💸 للاشتراك ومشاهدة البث والفيديوهات: قم بتحويل المبلغ ({t_price} جنيه) على رقم فودافون كاش: <b>01213783090</b>
                     </div>
                     """, unsafe_allow_html=True)
-                    if st.button(f"🚀 طلب الاشتراك مع الأستاذ {t_name}", key=f"btn_{t_email}"):
-                        c.execute("INSERT OR REPLACE INTO subscriptions (student_email, teacher_email, status) VALUES (?, ?, 'pending')",
-                                  (st.session_state.user_email, t_email))
+                    if st.button(f"🚀 طلب الاشتراك مع الأستاذ {t_name}", key=f"btn_{t_phone}"):
+                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
+                                  (st.session_state.user_phone, t_phone))
                         conn.commit()
                         st.success("تم إرسال طلب الاشتراك! في انتظار موافقة الأستاذ.")
                         st.rerun()
@@ -274,9 +328,9 @@ else:
 
     elif st.session_state.user_role == "أستاذ":
         st.subheader("👨‍🏫 استوديو إدارة الدروس والبث")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE email=?", (st.session_state.user_email,))
+        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE phone=?", (st.session_state.user_phone,))
         t_info = c.fetchone()
-        room_id = t_info[6] if t_info else f"room_{st.session_state.user_email.split('@')[0]}"
+        room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
 
         tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 طلبات الطلاب", "⚙️ بياناتي الشخصية"])
 
@@ -299,14 +353,14 @@ else:
                     with open(file_path, "wb") as f:
                         f.write(up_file.getbuffer())
                     f_type = "video" if up_file.type.startswith("video") else "image"
-                    c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
-                              (st.session_state.user_email, p_title, f_type, file_path))
+                    c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
+                              (st.session_state.user_phone, p_title, f_type, file_path))
                     conn.commit()
                     st.success("✔️ تم رفع الفيديو وإرساله بنجاح!")
                     st.rerun()
 
             st.write("---")
-            c.execute("SELECT title, status FROM posts WHERE teacher_email=?", (st.session_state.user_email,))
+            c.execute("SELECT title, status FROM posts WHERE teacher_phone=?", (st.session_state.user_phone,))
             my_posts = c.fetchall()
             if my_posts:
                 for p_t, p_s in my_posts:
@@ -319,19 +373,24 @@ else:
 
         with tab_subs:
             st.write("📋 **الطلاب المتقدمين للاشتراك بعد التحويل:**")
-            c.execute("SELECT student_email, status FROM subscriptions WHERE teacher_email=?", (st.session_state.user_email,))
+            c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (st.session_state.user_phone,))
             subs = c.fetchall()
             if subs:
-                for s_email, status in subs:
+                for s_ph, status in subs:
+                    c.execute("SELECT name, grade FROM users WHERE phone=?", (s_ph,))
+                    st_data = c.fetchone()
+                    st_display_name = st_data[0] if st_data else s_ph
+                    st_display_grade = st_data[1] if st_data else "غير محدد"
+
                     col_a, col_b, col_c = st.columns([2, 1, 1])
-                    col_a.write(f"🎓 الطالب: **{s_email}** (الحالة: {status})")
+                    col_a.write(f"🎓 الطالب: **{st_display_name}** (رقم: {s_ph} - سنة: {st_display_grade}) [الحالة: {status}]")
                     if status == 'pending':
-                        if col_b.button("✅ قبول وتفعيل", key=f"acc_{s_email}"):
-                            c.execute("UPDATE subscriptions SET status='active' WHERE student_email=? AND teacher_email=?", (s_email, st.session_state.user_email))
+                        if col_b.button("✅ قبول وتفعيل", key=f"acc_{s_ph}"):
+                            c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, st.session_state.user_phone))
                             conn.commit()
                             st.rerun()
-                        if col_c.button("❌ رفض", key=f"ref_{s_email}"):
-                            c.execute("DELETE FROM subscriptions WHERE student_email=? AND teacher_email=?", (s_email, st.session_state.user_email))
+                        if col_c.button("❌ رفض", key=f"ref_{s_ph}"):
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, st.session_state.user_phone))
                             conn.commit()
                             st.rerun()
             else:
@@ -346,8 +405,8 @@ else:
                 price_in = st.number_input("سعر الاشتراك (جنيه):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
                 img_in = st.text_input("رابط صورتك الشخصية (URL):", value=t_info[5] if t_info else "")
                 if st.form_submit_button("حفظ وتحديث البيانات"):
-                    c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE email=?",
-                              (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_email))
+                    c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE phone=?",
+                              (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_phone))
                     conn.commit()
                     st.success("تم حفظ البيانات بنجاح!")
                     st.rerun()
@@ -366,12 +425,12 @@ else:
         
         dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة الفيديوهات والمنشورات", "🚫 إدارة المستخدمين والحظر"])
         with dev_tab1:
-            c.execute("SELECT id, teacher_email, title, media_type, file_path FROM posts WHERE status='pending'")
+            c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
             pending_posts = c.fetchall()
             if pending_posts:
                 for p_id, p_teacher, p_title, p_type, p_path in pending_posts:
                     st.markdown('<div class="card">', unsafe_allow_html=True)
-                    st.write(f"👨‍🏫 **الأستاذ:** {p_teacher}")
+                    st.write(f"📱 **رقم الأستاذ:** {p_teacher}")
                     st.write(f"📌 **العنوان:** {p_title}")
                     if os.path.exists(p_path):
                         if p_type == "image":
@@ -392,12 +451,12 @@ else:
                 st.info("لا توجد فيديوهات أو منشورات جديدة تنتظر المراجعة.")
 
         with dev_tab2:
-            c.execute("SELECT id, email, role, is_blocked FROM users WHERE role != 'مطور'")
+            c.execute("SELECT id, phone, name, role, is_blocked FROM users WHERE role != 'مطور'")
             users = c.fetchall()
             if users:
-                for u_id, u_email, u_role, is_blocked in users:
+                for u_id, u_phone, u_name, u_role, is_blocked in users:
                     u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
-                    u_col1.write(f"👤 **{u_email}** ({u_role})")
+                    u_col1.write(f"👤 **{u_name}** (رقم: {u_phone} - {u_role})")
                     if is_blocked == 1:
                         u_col2.error("محظور 🚫")
                         if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
