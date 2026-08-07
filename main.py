@@ -4,14 +4,11 @@ import os
 import streamlit.components.v1 as components
 import hashlib
 from streamlit_autorefresh import st_autorefresh
-from streamlit_cookies_controller import CookieController
 
 # ==========================================
 # 1. إعدادات التطبيق وتصميم الواجهة النظيفة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
-
-cookie_controller = CookieController()
 
 st.markdown("""
 <style>
@@ -126,7 +123,7 @@ def init_db():
         if "room_id" not in existing_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
-        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '901000')")
+        c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '901000')")
         conn.commit()
 
 init_db()
@@ -151,11 +148,13 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
-# 3. إدارة الجلسات عبر الـ Cookies الدائمة
+# 3. إدارة الجلسات عبر الـ Query Params (تسجيل دائم ومستقر)
 # ==========================================
+params = st.query_params
+
 if "is_logged_in" not in st.session_state:
-    saved_phone = cookie_controller.get('nova_phone')
-    saved_role = cookie_controller.get('nova_role')
+    saved_phone = params.get("nova_phone", "")
+    saved_role = params.get("nova_role", "")
     
     if saved_phone and saved_role:
         st.session_state.is_logged_in = True
@@ -170,15 +169,14 @@ def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
     st.session_state.user_role = role
-    cookie_controller.set('nova_phone', phone, max_age=31536000)
-    cookie_controller.set('nova_role', role, max_age=31536000)
+    st.query_params["nova_phone"] = phone
+    st.query_params["nova_role"] = role
 
 def logout_user():
     st.session_state.is_logged_in = False
     st.session_state.user_phone = ""
     st.session_state.user_role = None
-    cookie_controller.set('nova_phone', '', max_age=0)
-    cookie_controller.set('nova_role', '', max_age=0)
+    st.query_params.clear()
 
 # ==========================================
 # 4. التحديثات التلقائية للمحتوى
