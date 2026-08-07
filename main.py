@@ -2,6 +2,8 @@ import streamlit as st
 import sqlite3
 import os
 import streamlit.components.v1 as components
+import extra_streamlit_components as stx
+import datetime
 
 # إعداد المجلدات والملفات لضمان استقرار وحفظ البيانات
 MEDIA_DIR = "uploaded_media"
@@ -125,11 +127,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# إدارة الجلسة لحفظ حالة الدخول
+# إعداد الكوكيز لحفظ تسجيل الدخول
+@st.cache_resource(experimental_allow_widgets=True)
+def get_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_manager()
+
+# قراءة الكوكيز المحفوظة
+saved_phone = cookie_manager.get(cookie="nova_user_phone")
+saved_role = cookie_manager.get(cookie="nova_user_role")
+
+# إدارة الجلسة لحفظ حالة الدخول وتحديثها من الكوكيز
 if "is_logged_in" not in st.session_state:
-    st.session_state.is_logged_in = False
-    st.session_state.user_role = None
-    st.session_state.user_phone = ""
+    if saved_phone and saved_role:
+        st.session_state.is_logged_in = True
+        st.session_state.user_phone = saved_phone
+        st.session_state.user_role = saved_role
+    else:
+        st.session_state.is_logged_in = False
+        st.session_state.user_role = None
+        st.session_state.user_phone = ""
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
@@ -166,6 +184,11 @@ if not st.session_state.is_logged_in:
                         conn.commit()
                         conn.close()
 
+                        # حفظ الكوكيز لمدة سنة
+                        expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
+                        cookie_manager.set("nova_user_phone", s_phone, expires_at=expire_date)
+                        cookie_manager.set("nova_user_role", "طالب", expires_at=expire_date)
+
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = s_phone
                         st.session_state.user_role = "طالب"
@@ -198,6 +221,11 @@ if not st.session_state.is_logged_in:
                         conn.commit()
                         conn.close()
 
+                        # حفظ الكوكيز لمدة سنة
+                        expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
+                        cookie_manager.set("nova_user_phone", t_phone, expires_at=expire_date)
+                        cookie_manager.set("nova_user_role", "أستاذ", expires_at=expire_date)
+
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = t_phone
                         st.session_state.user_role = "أستاذ"
@@ -215,6 +243,12 @@ if not st.session_state.is_logged_in:
             if dev_btn:
                 correct_dev_code = st.secrets.get("DEV_SECRET", "900800")
                 if dev_code.strip() == correct_dev_code:
+                    
+                    # حفظ الكوكيز لمدة سنة
+                    expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
+                    cookie_manager.set("nova_user_phone", "dev_admin", expires_at=expire_date)
+                    cookie_manager.set("nova_user_role", "مطور", expires_at=expire_date)
+
                     st.session_state.is_logged_in = True
                     st.session_state.user_phone = "dev_admin"
                     st.session_state.user_role = "مطور"
@@ -227,6 +261,10 @@ else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}**")
     if logout_col.button("🚪 تسجيـل الخروج"):
+        # حذف الكوكيز عند تسجيل الخروج
+        cookie_manager.delete("nova_user_phone")
+        cookie_manager.delete("nova_user_role")
+        
         st.session_state.is_logged_in = False
         st.session_state.user_role = None
         st.session_state.user_phone = ""
