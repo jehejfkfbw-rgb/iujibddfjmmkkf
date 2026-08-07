@@ -6,7 +6,7 @@ import hashlib
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. إعدادات التطبيق وتصميم واجهة الموبايل
+# 1. إعدادات التطبيق وتصميم الواجهة النظيفة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
 
@@ -16,68 +16,60 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display: none;}
-    div[data-testid="stStatusWidget"] {visibility: hidden; display: none;}
-    div[data-testid="stToolbar"] {visibility: hidden; display: none;}
-    div[data-testid="stDecoration"] {visibility: hidden; display: none;}
     
     .block-container {
-        max-width: 500px !important;
+        max-width: 600px !important;
         padding-top: 1.5rem !important;
         padding-bottom: 2rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
     }
     
     .stApp {
         direction: rtl;
         text-align: right;
-        background-color: #0f172a !important;
-        color: #f8fafc !important;
+        background-color: #f8fafc !important;
+        color: #1e293b !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    h1, h2, h3, h4, p, span, label {
-        color: #f8fafc !important;
-        font-weight: 600 !important;
+    h1, h2, h3, h4 {
+        color: #4f46e5 !important;
+        font-weight: bold !important;
     }
     
-    .stTextInput input, .stNumberInput input {
-        background-color: #1e293b !important;
-        color: #f8fafc !important;
-        border: 2px solid #334155 !important;
-        border-radius: 14px !important;
+    .stTextInput input, .stNumberInput input, .stPasswordInput input {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 12px !important;
         padding: 12px !important;
-    }
-    .stTextInput input:focus, .stNumberInput input:focus {
-        border-color: #3b82f6 !important;
     }
     
     .stButton>button {
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
         color: #ffffff !important;
         border: none !important;
-        border-radius: 14px !important;
+        border-radius: 12px !important;
         font-weight: bold !important;
         font-size: 16px !important;
-        padding: 14px 20px !important;
+        padding: 12px 20px !important;
         width: 100% !important;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
     }
     
     .app-card {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
         border-radius: 20px !important;
         padding: 20px !important;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3) !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05) !important;
         margin-bottom: 16px !important;
     }
     
     .cash-box {
-        background: #065f46 !important;
-        color: #ecfdf5 !important;
+        background: #ecfdf5 !important;
+        color: #065f46 !important;
         padding: 14px !important;
-        border-radius: 14px !important;
+        border-radius: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
         font-size: 15px !important;
@@ -191,7 +183,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. التحديثات التلقائية (Real-Time Fragments)
+# 4. التحديثات التلقائية للمحتوى
 # ==========================================
 @st.fragment
 def display_student_media(teacher_phone):
@@ -261,7 +253,6 @@ st.markdown("<h2 style='text-align: center;'>⚡ منصة نوفا التعلي�
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    # واجهة تسجيل دخول منفصلة ومنسقة بالكامل بعيداً عن لوحة التحكم
     st.markdown("<div class='app-card'>", unsafe_allow_html=True)
     role_choice = st.radio("حدد نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -304,7 +295,7 @@ if not st.session_state.is_logged_in:
                                 st.success("تم التسجيل بنجاح!")
                                 st.rerun()
                             conn.close()
-                        except Exception as e:
+                        except:
                             st.error("حدث خطأ أثناء التسجيل، تأكد من صحة البيانات.")
                     else:
                         st.error("يرجى ملء الحقول الأساسية بدقة!")
@@ -312,7 +303,7 @@ if not st.session_state.is_logged_in:
         else:
             with st.form("student_login"):
                 st.subheader("تسجيل دخول الطالب")
-                s_email_in = st.text_input("البريد الإلكتروني:")
+                s_email_in = st.text_input("البريد الإلكتروني أو الهاتف:")
                 s_pass_in = st.text_input("كلمة المرور:", type="password")
                 s_login_btn = st.form_submit_button("دخول")
                 
@@ -322,7 +313,7 @@ if not st.session_state.is_logged_in:
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             hashed_pass = hash_password(s_pass_in)
-                            c.execute("SELECT phone, is_blocked FROM users WHERE email=? AND password=? AND role='طالب'", (s_email_in, hashed_pass))
+                            c.execute("SELECT phone, is_blocked FROM users WHERE (email=? OR phone=?) AND password=? AND role='طالب'", (s_email_in, s_email_in, hashed_pass))
                             user_row = c.fetchone()
                             conn.close()
                             
@@ -341,7 +332,7 @@ if not st.session_state.is_logged_in:
                         except:
                             st.error("🚫 هذه البيانات غير موجودة في النظام!")
                     else:
-                        st.error("يرجى إدخال البريد وكلمة المرور!")
+                        st.error("يرجى إدخال البيانات المطلوبة!")
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif role_choice == "أستاذ 👨‍🏫":
@@ -422,7 +413,7 @@ if not st.session_state.is_logged_in:
             dev_btn = st.form_submit_button("دخول لوحة التحكم")
             
             if dev_btn:
-                correct_dev_code = st.secrets.get("DEV_SECRET", "900800")
+                correct_dev_code = "900800"
                 if dev_code.strip() == correct_dev_code:
                     login_user("dev_admin", "مطور")
                     st.success("أهلاً بك يا مطورنا!")
@@ -466,7 +457,7 @@ else:
                     with tab_live:
                         stream_html = f"""
                         <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
-                                style="width: 100%; height: 350px; border: 2px solid #3b82f6; border-radius: 12px; background: #000;"
+                                style="width: 100%; height: 350px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
                                 allow="camera; microphone; autoplay" allowfullscreen>
                         </iframe>
                         """
@@ -506,7 +497,7 @@ else:
         with tab_stream:
             t_stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&webcam=1&autostart=1" 
-                    style="width: 100%; height: 380px; border: 2px solid #3b82f6; border-radius: 12px; background: #000;"
+                    style="width: 100%; height: 380px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
                     allow="camera; microphone; autoplay" allowfullscreen>
             </iframe>
             """
