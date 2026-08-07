@@ -376,7 +376,8 @@ if not st.session_state.is_logged_in:
                                 st.error("🚫 رقم التليفون مسجل مسبقاً لأستاذ آخر!")
                             else:
                                 hashed_t_pass = hash_password(t_pass_reg)
-                                c.execute("INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100, '', ?)", 
+                                c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
+                                             VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100.0, '', ?)""", 
                                           (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", f"room_{t_phone_reg}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
                                 conn.commit()
@@ -595,8 +596,8 @@ else:
                         else:
                             hashed_tp = hash_password(new_t_pass)
                             c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                         VALUES (?, ?, ?, ?, 'جميع المراحل', 30, ?, '', ?)""",
-                                      (new_t_phone, hashed_tp, new_t_name, new_t_sub, new_t_price, f"room_{new_t_phone}"))
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                      (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
                             c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                             conn.commit()
                             st.success("تم إضافة الأستاذ بنجاح!")
