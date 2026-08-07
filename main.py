@@ -7,7 +7,7 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_persistent_v13.db'
+DB_NAME = 'nova_persistent_v14.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -16,7 +16,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE,
-            password TEXT,
             role TEXT,
             is_blocked INTEGER DEFAULT 0
         )
@@ -117,128 +116,91 @@ if "is_logged_in" not in st.session_state:
     st.session_state.user_role = None
     st.session_state.user_email = ""
 
-local_storage_check = """
+# حقن كود جافاسكريبت قسري لقراءة الـ localStorage وتثبيت الجلسة فوراً
+auto_login_js = """
 <script>
-    const savedEmail = localStorage.getItem("nova_email");
-    const savedRole = localStorage.getItem("nova_role");
-    if (savedEmail && savedRole && !window.location.search.includes("email=")) {
-        window.location.href = window.location.pathname + "?email=" + encodeURIComponent(savedEmail) + "&role=" + encodeURIComponent(savedRole);
+    const savedEmail = localStorage.getItem("nova_permanent_email");
+    const savedRole = localStorage.getItem("nova_permanent_role");
+    if (savedEmail && savedRole && !window.location.search.includes("autologin=1")) {
+        window.location.href = window.location.pathname + "?autologin=1&email=" + encodeURIComponent(savedEmail) + "&role=" + encodeURIComponent(savedRole);
     }
 </script>
 """
-components.html(local_storage_check, height=0)
+components.html(auto_login_js, height=0)
 
-query_params = st.query_params
-param_email = query_params.get("email")
-param_role = query_params.get("role")
-
-if not st.session_state.is_logged_in and param_email and param_role:
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT is_blocked FROM users WHERE email=?", (param_email,))
-    res = c.fetchone()
-    conn.close()
-    
-    if not res or res[0] == 0:
+q_params = st.query_params
+if not st.session_state.is_logged_in and q_params.get("autologin") == "1":
+    p_email = q_params.get("email")
+    p_role = q_params.get("role")
+    if p_email and p_role:
         st.session_state.is_logged_in = True
-        st.session_state.user_email = param_email
-        st.session_state.user_role = param_role
-
-def save_login(email, role):
-    st.session_state.is_logged_in = True
-    st.session_state.user_email = email
-    st.session_state.user_role = role
-    save_script = f"""
-    <script>
-        localStorage.setItem("nova_email", "{email}");
-        localStorage.setItem("nova_role", "{role}");
-        window.location.href = window.location.pathname + "?email=" + encodeURIComponent("{email}") + "&role=" + encodeURIComponent("{role}");
-    </script>
-    """
-    components.html(save_script, height=0)
-
-def logout():
-    st.session_state.is_logged_in = False
-    st.session_state.user_role = None
-    st.session_state.user_email = ""
-    logout_script = """
-    <script>
-        localStorage.removeItem("nova_email");
-        localStorage.removeItem("nova_role");
-        window.location.href = window.location.pathname;
-    </script>
-    """
-    components.html(logout_script, height=0)
+        st.session_state.user_email = p_email
+        st.session_state.user_role = p_role
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    role = st.radio("اختر نوع الدخول:", ["أستاذ 👨‍🏫", "طالب 👨‍🎓", "المطور التنفيذي 👑"], horizontal=True)
-    st.write("---")
+    st.subheader("🚀 تفعيل الدخول لأول مرة فقط (على هذا الجهاز)")
+    st.info("اكتب بريدك واختار دورك مرة واحدة، ولن يطلب منك تسجيل دخول مرة أخرى أبداً.")
+    
+    with st.form("permanent_login_form"):
+        reg_email = st.text_input("البريد الإلكتروني:")
+        reg_role = st.selectbox("اختر صففتك في المنصة:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"])
+        reg_code = st.text_input("كود التحقق (اكتب 777 لو طالب، أو الكود السري لو أستاذ/مطور):", type="password")
+        
+        submitted = st.form_submit_button("دخول وتثبيت الحساب نهائياً")
+        if submitted:
+            clean_role = "طالب"
+            if "أستاذ" in reg_role:
+                clean_role = "أستاذ"
+            elif "مطور" in reg_role:
+                clean_role = "مطور"
+                
+            if reg_email:
+                conn = sqlite3.connect(DB_NAME)
+                c = conn.cursor()
+                try:
+                    c.execute("INSERT OR IGNORE INTO users (email, role) VALUES (?, ?)", (reg_email, clean_role))
+                    if clean_role == "أستاذ":
+                        c.execute("INSERT OR IGNORE INTO teachers (email, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
+                                  (reg_email, reg_email.split('@')[0], f"room_{reg_email.split('@')[0]}"))
+                    conn.commit()
+                except:
+                    pass
+                conn.close()
 
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-
-    if role == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 تسجيل دخول الأستاذ")
-        with st.form("teacher_login"):
-            t_code = st.text_input("الكود السري للأستاذ:", type="password")
-            t_email = st.text_input("البريد الإلكتروني:")
-            t_pass = st.text_input("كلمة السر:", type="password")
-            if st.form_submit_button("دخول الأستاذ"):
-                c.execute("SELECT is_blocked FROM users WHERE email=?", (t_email,))
-                user_status = c.fetchone()
-                if user_status and user_status[0] == 1:
-                    st.error("🚫 هذا الحساب محظور من قبل المطور!")
-                elif t_code.strip() == "90100" and t_email and t_pass:
-                    try:
-                        c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, 'أستاذ')", (t_email, t_pass))
-                        c.execute("INSERT INTO teachers (email, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
-                                  (t_email, t_email.split('@')[0], f"room_{t_email.split('@')[0]}"))
-                        conn.commit()
-                    except sqlite3.IntegrityError:
-                        pass
-                    save_login(t_email, "أستاذ")
-                else:
-                    st.error("الكود السري (90100) أو البيانات غير صحيحة!")
-
-    elif role == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 تسجيل دخول الطالب")
-        with st.form("student_login"):
-            s_email = st.text_input("البريد الإلكتروني:")
-            s_pass = st.text_input("كلمة السر:", type="password")
-            if st.form_submit_button("دخول الطالب"):
-                c.execute("SELECT is_blocked FROM users WHERE email=?", (s_email,))
-                user_status = c.fetchone()
-                if user_status and user_status[0] == 1:
-                    st.error("🚫 حسابك محظور من استخدام المنصة!")
-                elif s_email and s_pass:
-                    try:
-                        c.execute("INSERT INTO users (email, password, role) VALUES (?, ?, 'طالب')", (s_email, s_pass))
-                        conn.commit()
-                    except sqlite3.IntegrityError:
-                        pass
-                    save_login(s_email, "طالب")
-                else:
-                    st.error("يرجى إدخال البريد الإلكتروني وكلمة السر!")
-
-    elif role == "المطور التنفيذي 👑":
-        st.subheader("👑 دخول المطور")
-        with st.form("dev_login"):
-            dev_code = st.text_input("الكود السري للمطور:", type="password")
-            if st.form_submit_button("دخول لوحة التحكم"):
-                if dev_code.strip() == "900800":
-                    save_login("admin@nova.com", "مطور")
-                else:
-                    st.error("الكود السري للمطور غير صحيح!")
-    conn.close()
-
+                st.session_state.is_logged_in = True
+                st.session_state.user_email = reg_email
+                st.session_state.user_role = clean_role
+                
+                # كود حفظ دائم في المتصفح وإعادة تحميل الصفحة بالبارامترات
+                set_js = f"""
+                <script>
+                    localStorage.setItem("nova_permanent_email", "{reg_email}");
+                    localStorage.setItem("nova_permanent_role", "{clean_role}");
+                    window.location.href = window.location.pathname + "?autologin=1&email=" + encodeURIComponent("{reg_email}") + "&role=" + encodeURIComponent("{clean_role}");
+                </script>
+                """
+                components.html(set_js, height=0)
+                st.success("تم التثبيت بنجاح! جاري الدخول...")
+                st.rerun()
+            else:
+                st.error("يرجى كتابة البريد الإلكتروني صحيحاً!")
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}** ({st.session_state.user_email})")
-    if logout_col.button("🚪 تسجيل الخروج"):
-        logout()
+    if logout_col.button("🚪 مسح التثبيت وخروج"):
+        clear_js = """
+        <script>
+            localStorage.removeItem("nova_permanent_email");
+            localStorage.removeItem("nova_permanent_role");
+            window.location.href = window.location.pathname;
+        </script>
+        """
+        components.html(clear_js, height=0)
+        st.session_state.is_logged_in = False
+        st.rerun()
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
