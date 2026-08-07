@@ -19,7 +19,8 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            phone TEXT UNIQUE,
+            email TEXT UNIQUE,
+            password TEXT,
             name TEXT,
             age TEXT,
             grade TEXT,
@@ -31,7 +32,7 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            phone TEXT UNIQUE,
+            email TEXT UNIQUE,
             name TEXT,
             subject TEXT,
             grade_level TEXT,
@@ -41,21 +42,21 @@ def init_db():
             room_id TEXT
         )
     ''')
-    # جدول اشتراكات الطلاب مع الأساتذة
+    # جدول اشتراكات الطلاب مع الأساتذة (نعتمد على الإيميل بدلاً من الهاتف)
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_phone TEXT,
-            teacher_phone TEXT,
+            student_email TEXT,
+            teacher_email TEXT,
             status TEXT DEFAULT 'pending',
-            UNIQUE(student_phone, teacher_phone)
+            UNIQUE(student_email, teacher_email)
         )
     ''')
     # جدول المنشورات والفيديوهات
     c.execute('''
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            teacher_phone TEXT,
+            teacher_email TEXT,
             title TEXT,
             media_type TEXT,
             file_path TEXT,
@@ -127,27 +128,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# إعداد الكوكيز لحفظ تسجيل الدخول
+# إعداد الكوكيز لحفظ تسجيل الدخول دائمًا (مرة واحدة)
 @st.cache_resource
 def get_manager():
     return stx.CookieManager()
 
 cookie_manager = get_manager()
 
-# قراءة الكوكيز المحفوظة
-saved_phone = cookie_manager.get(cookie="nova_user_phone")
+saved_email = cookie_manager.get(cookie="nova_user_email")
 saved_role = cookie_manager.get(cookie="nova_user_role")
 
 # إدارة الجلسة لحفظ حالة الدخول وتحديثها من الكوكيز
 if "is_logged_in" not in st.session_state:
-    if saved_phone and saved_role:
+    if saved_email and saved_role:
         st.session_state.is_logged_in = True
-        st.session_state.user_phone = saved_phone
+        st.session_state.user_email = saved_email
         st.session_state.user_role = saved_role
     else:
         st.session_state.is_logged_in = False
         st.session_state.user_role = None
-        st.session_state.user_phone = ""
+        st.session_state.user_email = ""
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
@@ -157,117 +157,129 @@ if not st.session_state.is_logged_in:
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 تسجيل أو دخول الطالب")
+        st.subheader("👨‍🎓 تسجيل دخول أو إنشاء حساب طالب")
         with st.form("student_reg"):
-            s_phone = st.text_input("رقم التليفون:")
+            s_email = st.text_input("البريد الإلكتروني:")
+            s_pass = st.text_input("كلمة المرور:", type="password")
             s_name = st.text_input("الاسم الكامل (لو أول مرة):")
             s_age = st.text_input("عنده كم سنة؟ (لو أول مرة):")
             s_grade = st.text_input("المرحلة الدراسية (لو أول مرة):")
             s_btn = st.form_submit_button("دخول التطبيق")
             
             if s_btn:
-                if s_phone:
+                if s_email and s_pass:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("SELECT role, is_blocked FROM users WHERE phone=?", (s_phone,))
+                    c.execute("SELECT role, password, is_blocked FROM users WHERE email=?", (s_email,))
                     existing_user = c.fetchone()
                     
-                    if existing_user and existing_user[1] == 1:
+                    if existing_user and existing_user[2] == 1:
                         st.error("🚫 هذا الحساب محظور من قبل المطور!")
+                    elif existing_user:
+                        # مستخدم قديم، نتحقق من الباسورد
+                        if existing_user[1] == s_pass:
+                            # حفظ الكوكيز لمدة سنة ليبقى مسجلاً بشكل دائم
+                            expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
+                            cookie_manager.set("nova_user_email", s_email, expires_at=expire_date)
+                            cookie_manager.set("nova_user_role", "طالب", expires_at=expire_date)
+
+                            st.session_state.is_logged_in = True
+                            st.session_state.user_email = s_email
+                            st.session_state.user_role = "طالب"
+                            st.success("تم الدخول بنجاح!")
+                            st.rerun()
+                        else:
+                            st.error("كلمة المرور غير صحيحة!")
                     else:
+                        # حساب جديد
                         final_name = s_name if s_name else "طالب"
                         final_age = s_age if s_age else "غير محدد"
                         final_grade = s_grade if s_grade else "غير محدد"
                         
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, 'طالب', 0)", 
-                                  (s_phone, final_name, final_age, final_grade))
+                        c.execute("INSERT INTO users (email, password, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, ?, 'طالب', 0)", 
+                                  (s_email, s_pass, final_name, final_age, final_grade))
                         conn.commit()
                         conn.close()
 
-                        # حفظ الكوكيز لمدة سنة
                         expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
-                        cookie_manager.set("nova_user_phone", s_phone, expires_at=expire_date)
+                        cookie_manager.set("nova_user_email", s_email, expires_at=expire_date)
                         cookie_manager.set("nova_user_role", "طالب", expires_at=expire_date)
 
                         st.session_state.is_logged_in = True
-                        st.session_state.user_phone = s_phone
+                        st.session_state.user_email = s_email
                         st.session_state.user_role = "طالب"
-                        st.success("تم الدخول بنجاح!")
+                        st.success("تم إنشاء الحساب والدخول بنجاح!")
                         st.rerun()
                 else:
-                    st.error("يرجى إدخال رقم التليفون!")
+                    st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور!")
 
     elif role_choice == "أستاذ 👨‍🏫":
         st.subheader("👨‍🏫 دخول الأستاذ")
         with st.form("teacher_reg"):
-            t_phone = st.text_input("رقم التليفون:")
             t_name = st.text_input("الاسم:")
-            t_code = st.text_input("الكود السري:", type="password")
+            t_email = st.text_input("البريد الإلكتروني:")
+            t_pass = st.text_input("كلمة المرور الخاصة بك:", type="password")
             t_btn = st.form_submit_button("دخول الأستاذ")
             
             if t_btn:
-                correct_t_code = st.secrets.get("TEACHER_SECRET", "90100")
-                if t_code.strip() == correct_t_code and t_phone:
+                if t_email and t_pass and t_name:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("SELECT is_blocked FROM users WHERE phone=?", (t_phone,))
+                    c.execute("SELECT is_blocked FROM users WHERE email=?", (t_email,))
                     u_stat = c.fetchone()
                     if u_stat and u_stat[0] == 1:
                         st.error("🚫 هذا الحساب محظور!")
                     else:
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone, t_name))
-                        c.execute("INSERT OR IGNORE INTO teachers (phone, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
-                                  (t_phone, t_name if t_name else "أستاذ", f"room_{t_phone}"))
+                        c.execute("INSERT OR REPLACE INTO users (email, password, name, role, is_blocked) VALUES (?, ?, ?, 'أستاذ', 0)", (t_email, t_pass, t_name))
+                        c.execute("INSERT OR IGNORE INTO teachers (email, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
+                                  (t_email, t_name, f"room_{t_email.replace('@', '_')}"))
                         conn.commit()
                         conn.close()
 
-                        # حفظ الكوكيز لمدة سنة
                         expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
-                        cookie_manager.set("nova_user_phone", t_phone, expires_at=expire_date)
+                        cookie_manager.set("nova_user_email", t_email, expires_at=expire_date)
                         cookie_manager.set("nova_user_role", "أستاذ", expires_at=expire_date)
 
                         st.session_state.is_logged_in = True
-                        st.session_state.user_phone = t_phone
+                        st.session_state.user_email = t_email
                         st.session_state.user_role = "أستاذ"
                         st.success("أهلاً بك يا استاذنا!")
                         st.rerun()
                 else:
-                    st.error("الكود السري خطأ أو رقم التليفون فارغ!")
+                    st.error("يرجى إدخال الاسم والبريد الإلكتروني وكلمة المرور!")
 
     elif role_choice == "مطور 👑":
         st.subheader("👑 دخول المطور")
         with st.form("dev_reg"):
-            dev_code = st.text_input("الكود السري للمطور:", type="password")
+            dev_code = st.text_input("كلمة المرور الخاصة بالمطور:", type="password")
             dev_btn = st.form_submit_button("دخول لوحة المطور")
             
             if dev_btn:
                 correct_dev_code = st.secrets.get("DEV_SECRET", "900800")
                 if dev_code.strip() == correct_dev_code:
-                    
-                    # حفظ الكوكيز لمدة سنة
                     expire_date = datetime.datetime.now() + datetime.timedelta(days=365)
-                    cookie_manager.set("nova_user_phone", "dev_admin", expires_at=expire_date)
+                    cookie_manager.set("nova_user_email", "dev_admin@nova.com", expires_at=expire_date)
                     cookie_manager.set("nova_user_role", "مطور", expires_at=expire_date)
 
                     st.session_state.is_logged_in = True
-                    st.session_state.user_phone = "dev_admin"
+                    st.session_state.user_email = "dev_admin@nova.com"
                     st.session_state.user_role = "مطور"
                     st.success("أهلاً بك يا مطورنا!")
                     st.rerun()
                 else:
-                    st.error("الكود السري للمطور خطأ!")
+                    st.error("كلمة المرور للمطور خطأ!")
 
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}**")
     if logout_col.button("🚪 تسجيـل الخروج"):
-        # حذف الكوكيز عند تسجيل الخروج
-        cookie_manager.delete("nova_user_phone")
+        # مسح الكوكيز عند تسجيل الخروج يدوياً
+        cookie_manager.delete("nova_user_email")
         cookie_manager.delete("nova_user_role")
-        
+
         st.session_state.is_logged_in = False
         st.session_state.user_role = None
-        st.session_state.user_phone = ""
+        st.session_state.user_email = ""
         st.rerun()
 
     conn = sqlite3.connect(DB_NAME)
@@ -275,12 +287,12 @@ else:
 
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 قائمة الأساتذة والمواد الدراسية")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
+        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, email FROM teachers")
         teachers = c.fetchall()
 
         if teachers:
             for t in teachers:
-                t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_phone = t
+                t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_email = t
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 col1, col2 = st.columns([1, 3])
                 with col1:
@@ -293,8 +305,8 @@ else:
                     st.markdown(f"📖 **المادة:** {t_sub} | 🏫 **المرحلة:** {t_grade}")
                     st.markdown(f"🎂 **العمر:** {t_age} سنة | 💰 **سعر الاشتراك:** {t_price} جنيه")
                 
-                c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                          (st.session_state.user_phone, t_phone))
+                c.execute("SELECT status FROM subscriptions WHERE student_email=? AND teacher_email=?", 
+                          (st.session_state.user_email, t_email))
                 sub_status = c.fetchone()
 
                 if sub_status and sub_status[0] == 'active':
@@ -310,7 +322,7 @@ else:
                         """
                         components.html(stream_html, height=450)
                     with tab_media:
-                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_phone=? AND status='approved'", (t_phone,))
+                        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_email=? AND status='approved'", (t_email,))
                         posts = c.fetchall()
                         if posts:
                             for p_title, p_type, p_path in posts:
@@ -330,9 +342,9 @@ else:
                         💸 للاشتراك ومشاهدة البث والفيديوهات: قم بتحويل المبلغ ({t_price} جنيه) على رقم فودافون كاش: <b>01213783090</b>
                     </div>
                     """, unsafe_allow_html=True)
-                    if st.button(f"🚀 طلب الاشتراك مع الأستاذ {t_name}", key=f"btn_{t_phone}"):
-                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
-                                  (st.session_state.user_phone, t_phone))
+                    if st.button(f"🚀 طلب الاشتراك مع الأستاذ {t_name}", key=f"btn_{t_email}"):
+                        c.execute("INSERT OR REPLACE INTO subscriptions (student_email, teacher_email, status) VALUES (?, ?, 'pending')",
+                                  (st.session_state.user_email, t_email))
                         conn.commit()
                         st.success("تم إرسال طلب الاشتراك! في انتظار موافقة الأستاذ.")
                         st.rerun()
@@ -342,9 +354,9 @@ else:
 
     elif st.session_state.user_role == "أستاذ":
         st.subheader("👨‍🏫 استوديو إدارة الدروس والبث")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE phone=?", (st.session_state.user_phone,))
+        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE email=?", (st.session_state.user_email,))
         t_info = c.fetchone()
-        room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
+        room_id = t_info[6] if t_info else f"room_{st.session_state.user_email.replace('@', '_')}"
 
         tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 طلبات الطلاب", "⚙️ بياناتي الشخصية"])
 
@@ -367,14 +379,14 @@ else:
                     with open(file_path, "wb") as f:
                         f.write(up_file.getbuffer())
                     f_type = "video" if up_file.type.startswith("video") else "image"
-                    c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
-                              (st.session_state.user_phone, p_title, f_type, file_path))
+                    c.execute("INSERT INTO posts (teacher_email, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
+                              (st.session_state.user_email, p_title, f_type, file_path))
                     conn.commit()
                     st.success("✔️ تم رفع الفيديو وإرساله للمطور بنجاح!")
                     st.rerun()
 
             st.write("---")
-            c.execute("SELECT title, status FROM posts WHERE teacher_phone=?", (st.session_state.user_phone,))
+            c.execute("SELECT title, status FROM posts WHERE teacher_email=?", (st.session_state.user_email,))
             my_posts = c.fetchall()
             if my_posts:
                 for p_t, p_s in my_posts:
@@ -387,25 +399,25 @@ else:
 
         with tab_subs:
             st.write("📋 **الطلاب المتقدمين للاشتراك:**")
-            c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (st.session_state.user_phone,))
+            c.execute("SELECT student_email, status FROM subscriptions WHERE teacher_email=?", (st.session_state.user_email,))
             subs = c.fetchall()
             if subs:
-                for s_ph, status in subs:
-                    c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
+                for s_em, status in subs:
+                    c.execute("SELECT name, age, grade FROM users WHERE email=?", (s_em,))
                     st_data = c.fetchone()
-                    st_display_name = st_data[0] if st_data else s_ph
+                    st_display_name = st_data[0] if st_data else s_em
                     st_display_age = st_data[1] if st_data else "غير محدد"
                     st_display_grade = st_data[2] if st_data else "غير محدد"
 
                     col_a, col_b, col_c = st.columns([2, 1, 1])
-                    col_a.write(f"🎓 الطالب: **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade} (رقم: {s_ph}) [الحالة: {status}]")
+                    col_a.write(f"🎓 الطالب: **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade} (إيميل: {s_em}) [الحالة: {status}]")
                     if status == 'pending':
-                        if col_b.button("✅ قبول وتفعيل", key=f"acc_{s_ph}"):
-                            c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, st.session_state.user_phone))
+                        if col_b.button("✅ قبول وتفعيل", key=f"acc_{s_em}"):
+                            c.execute("UPDATE subscriptions SET status='active' WHERE student_email=? AND teacher_email=?", (s_em, st.session_state.user_email))
                             conn.commit()
                             st.rerun()
-                        if col_c.button("❌ رفض", key=f"ref_{s_ph}"):
-                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, st.session_state.user_phone))
+                        if col_c.button("❌ رفض", key=f"ref_{s_em}"):
+                            c.execute("DELETE FROM subscriptions WHERE student_email=? AND teacher_email=?", (s_em, st.session_state.user_email))
                             conn.commit()
                             st.rerun()
             else:
@@ -420,8 +432,8 @@ else:
                 price_in = st.number_input("سعر الاشتراك (جنيه):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
                 img_in = st.text_input("رابط صورتك الشخصية (URL):", value=t_info[5] if t_info else "")
                 if st.form_submit_button("حفظ وتحديث البيانات"):
-                    c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE phone=?",
-                              (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_phone))
+                    c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE email=?",
+                              (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_email))
                     conn.commit()
                     st.success("تم حفظ البيانات بنجاح!")
                     st.rerun()
@@ -440,12 +452,12 @@ else:
         
         dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة الفيديوهات والمنشورات", "🚫 إدارة المستخدمين والحظر"])
         with dev_tab1:
-            c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
+            c.execute("SELECT id, teacher_email, title, media_type, file_path FROM posts WHERE status='pending'")
             pending_posts = c.fetchall()
             if pending_posts:
                 for p_id, p_teacher, p_title, p_type, p_path in pending_posts:
                     st.markdown('<div class="card">', unsafe_allow_html=True)
-                    st.write(f"📱 **رقم الأستاذ:** {p_teacher}")
+                    st.write(f"📱 **إيميل الأستاذ:** {p_teacher}")
                     st.write(f"📌 **العنوان:** {p_title}")
                     if os.path.exists(p_path):
                         if p_type == "image":
@@ -466,12 +478,12 @@ else:
                 st.info("لا توجد فيديوهات أو منشورات جديدة تنتظر المراجعة.")
 
         with dev_tab2:
-            c.execute("SELECT id, phone, name, age, grade, role, is_blocked FROM users WHERE role != 'مطور'")
+            c.execute("SELECT id, email, name, age, grade, role, is_blocked FROM users WHERE role != 'مطور'")
             users = c.fetchall()
             if users:
-                for u_id, u_phone, u_name, u_age, u_grade, u_role, is_blocked in users:
+                for u_id, u_email, u_name, u_age, u_grade, u_role, is_blocked in users:
                     u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
-                    u_col1.write(f"👤 **{u_name}** | السن: {u_age} | المرحلة: {u_grade} (رقم: {u_phone} - {u_role})")
+                    u_col1.write(f"👤 **{u_name}** | السن: {u_age} | المرحلة: {u_grade} (إيميل: {u_email} - {u_role})")
                     if is_blocked == 1:
                         u_col2.error("محظور 🚫")
                         if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
