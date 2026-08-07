@@ -116,13 +116,37 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
         status TEXT DEFAULT 'pending', UNIQUE(student_phone, teacher_phone))''')
+        
     c.execute('''CREATE TABLE IF NOT EXISTS posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
         media_type TEXT, file_path TEXT, status TEXT DEFAULT 'pending')''')
+
+    # جدول الإعدادات العامة (يتحكم بها المطور من اللوحة)
+    c.execute('''CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY, value TEXT)''')
+    
+    # وضع قيمة افتراضية لكود الأساتذة لو لم يكن موجوداً
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '123456')")
+    
     conn.commit()
     conn.close()
 
 init_db()
+
+def get_setting(key, default=""):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else default
+
+def update_setting(key, value):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -235,7 +259,7 @@ st.markdown("<h2 style='text-align: center;'>⚡ تطبيق نوفا التعل�
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    role_choice = st.radio("اختر صففتك:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    role_choice = st.radio("اختر صفتك:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
@@ -312,10 +336,14 @@ if not st.session_state.is_logged_in:
                 t_phone_reg = st.text_input("رقم التليفون:")
                 t_pass_reg = st.text_input("كلمة المرور:", type="password")
                 t_sub_reg = st.text_input("المادة الدراسية:")
+                t_secret_code = st.text_input("كود التسجيل السري للأستاذ:", type="password")
                 t_signup_btn = st.form_submit_button("إنشاء حساب الأستاذ")
                 
                 if t_signup_btn:
-                    if t_phone_reg and t_pass_reg:
+                    correct_teacher_code = get_setting("teacher_secret", "123456")
+                    if t_secret_code.strip() != correct_teacher_code:
+                        st.error("🚫 كود التسجيل السري خطأ! تواصل مع المطور للحصول عليه.")
+                    elif t_phone_reg and t_pass_reg:
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
@@ -332,7 +360,7 @@ if not st.session_state.is_logged_in:
                             st.rerun()
                         conn.close()
                     else:
-                        st.error("أدخل رقم الهاتف وكلمة المرور!")
+                        st.error("أدخل رقم الهاتف وكلمة المرور والكود السري!")
         
         else:
             with st.form("teacher_login"):
@@ -485,11 +513,12 @@ else:
                     st.rerun()
 
     # ------------------------------------------
-    # واجهة المطور
+    # واجهة المطور (الشاملة للتحكم في كل شيء)
     # ------------------------------------------
     elif st.session_state.user_role == "مطور":
-        st.subheader("👑 لوحة المطور")
-        dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة", "🚫 المستخدمين"])
+        st.subheader("👑 لوحة تحكم المطور الشاملة")
+        dev_tab1, dev_tab2, dev_tab3, dev_tab4 = st.tabs(["🎥 مراجعة المحتوى", "👨‍🏫 إدارة الأساتذة", "🚫 المستخدمين", "⚙️ الإعدادات العامة"])
+        
         with dev_tab1:
             c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
             pending_posts = c.fetchall()
@@ -511,25 +540,80 @@ else:
                         conn.commit()
                         st.rerun()
             else:
-                st.info("لا يوجد محتوى معلق.")
+                st.info("لا يوجد محتوى معلق للمراجعة.")
 
         with dev_tab2:
+            st.write("➕ **إضافة أستاذ جديد:**")
+            with st.form("add_teacher_dev"):
+                new_t_name = st.text_input("اسم الأستاذ:")
+                new_t_phone = st.text_input("رقم الهاتف:")
+                new_t_pass = st.text_input("كلمة المرور:", type="password")
+                new_t_sub = st.text_input("المادة الدراسية:")
+                new_t_price = st.number_input("سعر الاشتراك (جـ):", value=100.0)
+                add_t_btn = st.form_submit_button("إضافة الأستاذ فوراً")
+                
+                if add_t_btn:
+                    if new_t_phone and new_t_pass and new_t_name:
+                        c.execute("SELECT id FROM teachers WHERE phone=?", (new_t_phone,))
+                        if c.fetchone():
+                            st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
+                        else:
+                            hashed_tp = hash_password(new_t_pass)
+                            c.execute("INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, ?, ?, 'جميع المراحل', 30, ?, '', ?)",
+                                      (new_t_phone, hashed_tp, new_t_name, new_t_sub, new_t_price, f"room_{new_t_phone}"))
+                            c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
+                            conn.commit()
+                            st.success("تم إضافة الأستاذ بنجاح!")
+                            st.rerun()
+                    else:
+                        st.error("يرجى إكمال البيانات الأساسية للأستاذ.")
+
+            st.write("---")
+            st.write("📋 **الأساتذة الحاليون:**")
+            c.execute("SELECT id, name, phone, subject, price FROM teachers")
+            all_teachers = c.fetchall()
+            if all_teachers:
+                for t_id, t_n, t_p, t_s, t_pr in all_teachers:
+                    st.write(f"👨‍🏫 **{t_n}** | المادة: {t_s} | الهاتف: `{t_p}` | السعر: {t_pr} جـ")
+                    if st.button(f"🗑️ حذف الأستاذ {t_n}", key=f"del_t_{t_id}"):
+                        c.execute("DELETE FROM teachers WHERE id=?", (t_id,))
+                        c.execute("DELETE FROM users WHERE phone=?", (t_p,))
+                        conn.commit()
+                        st.success("تم الحذف بنجاح!")
+                        st.rerun()
+            else:
+                st.info("لا يوجد أساتذة مسجلون حالياً.")
+
+        with dev_tab3:
             c.execute("SELECT id, phone, email, name, role, is_blocked FROM users WHERE role != 'مطور'")
             users = c.fetchall()
             if users:
                 for u_id, u_phone, u_email, u_name, u_role, is_blocked in users:
                     ident = u_email if u_email else u_phone
-                    st.write(f"👤 {u_name} ({u_role})")
+                    st.write(f"👤 {u_name} ({u_role}) - {ident}")
                     if is_blocked == 1:
-                        if st.button(f"فك حظر {ident}", key=f"unblock_{u_id}"):
+                        if st.button(f"فك حظر", key=f"unblock_{u_id}"):
                             c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
                             conn.commit()
                             st.rerun()
                     else:
-                        if st.button(f"حظر {ident}", key=f"block_{u_id}"):
+                        if st.button(f"حظر", key=f"block_{u_id}"):
                             c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
                             conn.commit()
                             st.rerun()
+            else:
+                st.info("لا يوجد مستخدمون مسجلون.")
+
+        with dev_tab4:
+            st.write("⚙️ **إعدادات المنصة:**")
+            current_secret = get_setting("teacher_secret", "123456")
+            with st.form("settings_form"):
+                new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret)
+                save_settings_btn = st.form_submit_button("حفظ التغييرات")
+                if save_settings_btn:
+                    update_setting("teacher_secret", new_secret_input.strip())
+                    st.success("تم تحديث كود التسجيل السري بنجاح!")
+                    st.rerun()
 
     conn.close()
 
