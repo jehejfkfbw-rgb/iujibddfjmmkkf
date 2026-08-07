@@ -3,12 +3,10 @@ import streamlit.components.v1 as components
 import sqlite3
 import os
 
-# ==================== 1. إعداد مجلد الملفات ====================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-# ==================== 2. إعداد قاعدة البيانات ====================
 DB_NAME = 'nova_persistent_v13.db'
 
 def init_db():
@@ -60,7 +58,6 @@ def init_db():
 
 init_db()
 
-# ==================== 3. الواجهة والتصميم ====================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide")
 
 st.markdown("""
@@ -115,13 +112,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 4. نظام الجلسة والذاكرة الدائمة عبر الرابط ====================
+# نظام استرجاع الجلسة التلقائي عبر الـ LocalStorage برمجياً
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
 
-# جلب البيانات من الـ Query Parameters في الرابط
+# حقن كود جافاسكريبت لقراءة وفحص التخزين المحلي للمتصفح تلقائياً
+local_storage_check = """
+<script>
+    const savedEmail = localStorage.getItem("nova_email");
+    const savedRole = localStorage.getItem("nova_role");
+    if (savedEmail && savedRole && !window.location.search.includes("email=")) {
+        window.location.href = window.location.pathname + "?email=" + encodeURIComponent(savedEmail) + "&role=" + encodeURIComponent(savedRole);
+    }
+</script>
+"""
+components.html(local_storage_check, height=0)
+
 query_params = st.query_params
 param_email = query_params.get("email")
 param_role = query_params.get("role")
@@ -142,20 +150,32 @@ def save_login(email, role):
     st.session_state.is_logged_in = True
     st.session_state.user_email = email
     st.session_state.user_role = role
-    # حقن البيانات مباشرة في الرابط لتثبيتها في المتصفح
-    st.query_params["email"] = email
-    st.query_params["role"] = role
+    # حفظ الدخول في ذاكرة المتصفح دائمياً وإعادة التوجيه
+    save_script = f"""
+    <script>
+        localStorage.setItem("nova_email", "{email}");
+        localStorage.setItem("nova_role", "{role}");
+        window.location.href = window.location.pathname + "?email=" + encodeURIComponent("{email}") + "&role=" + encodeURIComponent("{role}");
+    </script>
+    """
+    components.html(save_script, height=0)
 
 def logout():
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
     st.session_state.user_email = ""
-    st.query_params.clear()
+    logout_script = """
+    <script>
+        localStorage.removeItem("nova_email");
+        localStorage.removeItem("nova_role");
+        window.location.href = window.location.pathname;
+    </script>
+    """
+    components.html(logout_script, height=0)
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
 
-# ==================== 5. تسجيل الدخول ====================
 if not st.session_state.is_logged_in:
     role = st.radio("اختر نوع الدخول:", ["أستاذ 👨‍🏫", "طالب 👨‍🎓", "المطور التنفيذي 👑"], horizontal=True)
     st.write("---")
@@ -183,7 +203,6 @@ if not st.session_state.is_logged_in:
                     except sqlite3.IntegrityError:
                         pass
                     save_login(t_email, "أستاذ")
-                    st.rerun()
                 else:
                     st.error("الكود السري (90100) أو البيانات غير صحيحة!")
 
@@ -204,7 +223,6 @@ if not st.session_state.is_logged_in:
                     except sqlite3.IntegrityError:
                         pass
                     save_login(s_email, "طالب")
-                    st.rerun()
                 else:
                     st.error("يرجى إدخال البريد الإلكتروني وكلمة السر!")
 
@@ -215,18 +233,15 @@ if not st.session_state.is_logged_in:
             if st.form_submit_button("دخول لوحة التحكم"):
                 if dev_code.strip() == "900800":
                     save_login("admin@nova.com", "مطور")
-                    st.rerun()
                 else:
                     st.error("الكود السري للمطور غير صحيح!")
     conn.close()
 
-# ==================== 6. لوحات التحكم والواجهات ====================
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}** ({st.session_state.user_email})")
     if logout_col.button("🚪 تسجيل الخروج"):
         logout()
-        st.rerun()
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
