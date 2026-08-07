@@ -7,7 +7,7 @@ MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_persistent_v15.db'
+DB_NAME = 'nova_ultimate_v1.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -134,9 +134,15 @@ if not st.session_state.is_logged_in and q_params.get("autologin") == "1":
     p_phone = q_params.get("phone")
     p_role = q_params.get("role")
     if p_phone and p_role:
-        st.session_state.is_logged_in = True
-        st.session_state.user_phone = p_phone
-        st.session_state.user_role = p_role
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        c.execute("SELECT is_blocked FROM users WHERE phone=?", (p_phone,))
+        res = c.fetchone()
+        conn.close()
+        if not res or res[0] == 0:
+            st.session_state.is_logged_in = True
+            st.session_state.user_phone = p_phone
+            st.session_state.user_role = p_role
 
 st.title("⚡ منصة نوفا التعليمية")
 st.write("---")
@@ -146,10 +152,10 @@ if not st.session_state.is_logged_in:
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 تسجيل دخول الطالب (مرة واحدة)")
+        st.subheader("👨‍🎓 تسجيـل الطالـب (مرة واحدة فقط)")
         with st.form("student_reg"):
             s_phone = st.text_input("رقم التليفون:")
-            s_name = st.text_input("الاسم الكامل:")
+            s_name = st.text_input("الاسم:")
             s_grade = st.text_input("سنتك كام (المرحلة الدراسية):")
             s_btn = st.form_submit_button("دخول المنصة")
             
@@ -157,83 +163,87 @@ if not st.session_state.is_logged_in:
                 if s_phone and s_name:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    try:
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, grade) VALUES (?, ?, 'طالب', ?)", (s_phone, s_name, s_grade))
+                    c.execute("SELECT is_blocked FROM users WHERE phone=?", (s_phone,))
+                    u_stat = c.fetchone()
+                    if u_stat and u_stat[0] == 1:
+                        st.error("🚫 هذا الحساب محظور من قبل المطور!")
+                    else:
+                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, grade, is_blocked) VALUES (?, ?, 'طالب', ?, 0)", (s_phone, s_name, s_grade))
                         conn.commit()
-                    except:
-                        pass
-                    conn.close()
+                        conn.close()
 
-                    st.session_state.is_logged_in = True
-                    st.session_state.user_phone = s_phone
-                    st.session_state.user_role = "طالب"
+                        st.session_state.is_logged_in = True
+                        st.session_state.user_phone = s_phone
+                        st.session_state.user_role = "طالب"
 
-                    set_js = f"""
-                    <script>
-                        localStorage.setItem("nova_phone", "{s_phone}");
-                        localStorage.setItem("nova_role", "طالب");
-                        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{s_phone}") + "&role=طالب";
-                    </script>
-                    """
-                    components.html(set_js, height=0)
-                    st.rerun()
+                        set_js = f"""
+                        <script>
+                            localStorage.setItem("nova_phone", "{s_phone}");
+                            localStorage.setItem("nova_role", "طالب");
+                            window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{s_phone}") + "&role=طالب";
+                        </script>
+                        """
+                        components.html(set_js, height=0)
+                        st.rerun()
                 else:
-                    st.error("يرجى إدخال رقم التليفون والاسم على الأقل!")
+                    st.error("يرجى إدخال رقم التليفون والاسم!")
 
     elif role_choice == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري)")
+        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري 90100)")
         with st.form("teacher_reg"):
             t_phone = st.text_input("رقم التليفون:")
             t_name = st.text_input("الاسم:")
-            t_code = st.text_input("الكود السري (90100):", type="password")
+            t_code = st.text_input("الكود السري:", type="password")
             t_btn = st.form_submit_button("دخول الأستاذ")
             
             if t_btn:
                 if t_code.strip() == "90100" and t_phone:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    try:
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, role) VALUES (?, ?, 'أستاذ')", (t_phone, t_name))
+                    c.execute("SELECT is_blocked FROM users WHERE phone=?", (t_phone,))
+                    u_stat = c.fetchone()
+                    if u_stat and u_stat[0] == 1:
+                        st.error("🚫 هذا الحساب محظور!")
+                    else:
+                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone, t_name))
                         c.execute("INSERT OR IGNORE INTO teachers (phone, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
                                   (t_phone, t_name if t_name else "أستاذ", f"room_{t_phone}"))
                         conn.commit()
-                    except:
-                        pass
-                    conn.close()
+                        conn.close()
 
-                    st.session_state.is_logged_in = True
-                    st.session_state.user_phone = t_phone
-                    st.session_state.user_role = "أستاذ"
+                        st.session_state.is_logged_in = True
+                        st.session_state.user_phone = t_phone
+                        st.session_state.user_role = "أستاذ"
 
-                    set_js = f"""
-                    <script>
-                        localStorage.setItem("nova_phone", "{t_phone}");
-                        localStorage.setItem("nova_role", "أستاذ");
-                        window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{t_phone}") + "&role=أستاذ";
-                    </script>
-                    """
-                    components.html(set_js, height=0)
-                    st.rerun()
+                        set_js = f"""
+                        <script>
+                            localStorage.setItem("nova_phone", "{t_phone}");
+                            localStorage.setItem("nova_role", "أستاذ");
+                            window.location.href = window.location.pathname + "?autologin=1&phone=" + encodeURIComponent("{t_phone}") + "&role=أستاذ";
+                        </script>
+                        """
+                        components.html(set_js, height=0)
+                        st.rerun()
                 else:
                     st.error("الكود السري غير صحيح (الكود هو 90100) أو رقم التليفون فارغ!")
 
     elif role_choice == "مطور 👑":
-        st.subheader("👑 دخول المطور (بالكود السري)")
+        st.subheader("👑 دخول المطور (بالكود السري 900800)")
         with st.form("dev_reg"):
-            dev_code = st.text_input("الكود السري للمطور (900800):", type="password")
+            dev_code = st.text_input("الكود السري للمطور:", type="password")
             dev_btn = st.form_submit_button("دخول لوحة المطور")
             
             if dev_btn:
                 if dev_code.strip() == "900800":
                     st.session_state.is_logged_in = True
-                    st.session_state.user_phone = "01000000000"
+                    st.session_state.user_phone = "dev_admin"
                     st.session_state.user_role = "مطور"
 
                     set_js = f"""
                     <script>
-                        localStorage.setItem("nova_phone", "01000000000");
+                        localStorage.setItem("nova_phone", "dev_admin");
                         localStorage.setItem("nova_role", "مطور");
-                        window.location.href = window.location.pathname + "?autologin=1&phone=01000000000&role=مطور";
+                        window.location.href = window.location.pathname + "?autologin=1&phone=dev_admin&role=مطور";
                     </script>
                     """
                     components.html(set_js, height=0)
@@ -243,8 +253,8 @@ if not st.session_state.is_logged_in:
 
 else:
     top_col, logout_col = st.columns([3, 1])
-    top_col.success(f"مرحباً بك: **{st.session_state.user_role}** (رقم: {st.session_state.user_phone})")
-    if logout_col.button("🚪 خروج وتغيير الحساب"):
+    top_col.success(f"مرحباً بك: **{st.session_state.user_role}**")
+    if logout_col.button("🚪 خروج"):
         clear_js = """
         <script>
             localStorage.removeItem("nova_phone");
@@ -356,7 +366,7 @@ else:
                     c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
                               (st.session_state.user_phone, p_title, f_type, file_path))
                     conn.commit()
-                    st.success("✔️ تم رفع الفيديو وإرساله بنجاح!")
+                    st.success("✔️ تم رفع الفيديو وإرساله للمطور بنجاح!")
                     st.rerun()
 
             st.write("---")
@@ -372,7 +382,7 @@ else:
                 st.info("لم تقم بنشر أي منشورات بعد.")
 
         with tab_subs:
-            st.write("📋 **الطلاب المتقدمين للاشتراك بعد التحويل:**")
+            st.write("📋 **الطلاب المتقدمين للاشتراك:**")
             c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (st.session_state.user_phone,))
             subs = c.fetchall()
             if subs:
@@ -419,8 +429,8 @@ else:
         tc_count = c.fetchone()[0]
         
         col_m1, col_m2 = st.columns(2)
-        col_m1.metric("إجمالي الطلاب", st_count)
-        col_m2.metric("إجمالي الأساتذة", tc_count)
+        col_m1.metric("إجمالي الطلاب المسجلين", st_count)
+        col_m2.metric("إجمالي الأساتذة المسجلين", tc_count)
         st.write("---")
         
         dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة الفيديوهات والمنشورات", "🚫 إدارة المستخدمين والحظر"])
