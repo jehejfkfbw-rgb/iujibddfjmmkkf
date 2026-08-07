@@ -6,11 +6,10 @@ import hashlib
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. الإعدادات الأساسية وإعدادات الصفحة
+# 1. إعدادات التطبيق وتصميم واجهة الموبايل
 # ==========================================
-st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
 
-# إخفاء شريط التحميل، الروابط الخارجية، وعلامات Streamlit بالكامل
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -21,57 +20,75 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden; display: none;}
     div[data-testid="stDecoration"] {visibility: hidden; display: none;}
     
+    /* جعل الحاوية الرئيسية تبدو كإطار تطبيق موبايل أنيق */
     .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 0rem !important;
+        max-width: 500px !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
     
     .stApp {
         direction: rtl;
         text-align: right;
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
-        color: #0f172a !important;
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    label, p, span, h1, h2, h3, h4, div {
-        color: #0f172a !important;
-        font-weight: 700 !important;
+    
+    /* تخصيص النصوص والعناوين داخل التطبيق */
+    h1, h2, h3, h4, p, span, label {
+        color: #f8fafc !important;
+        font-weight: 600 !important;
     }
+    
+    /* تصميم الحقول كأنها حقول تطبيق حقيقي */
     .stTextInput input, .stNumberInput input {
-        background-color: #ffffff !important;
-        color: #0f172a !important;
-        border: 2px solid #3b82f6 !important;
-        border-radius: 12px !important;
-        padding: 10px !important;
+        background-color: #1e293b !important;
+        color: #f8fafc !important;
+        border: 2px solid #334155 !important;
+        border-radius: 14px !important;
+        padding: 12px !important;
     }
+    .stTextInput input:focus, .stNumberInput input:focus {
+        border-color: #3b82f6 !important;
+    }
+    
+    /* أزرار التطبيق بتصميم جذاب */
     .stButton>button {
-        background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%) !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
         color: #ffffff !important;
         border: none !important;
-        border-radius: 12px !important;
+        border-radius: 14px !important;
         font-weight: bold !important;
         font-size: 16px !important;
-        padding: 12px 24px !important;
+        padding: 14px 20px !important;
         width: 100% !important;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
     }
-    .card {
-        background: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 16px !important;
-        padding: 24px !important;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08) !important;
-        margin-bottom: 20px !important;
+    
+    /* تصميم البطاقات (Cards) داخل التطبيق */
+    .app-card {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 20px !important;
+        padding: 20px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3) !important;
+        margin-bottom: 16px !important;
     }
+    
+    /* صندوق الدفع الفوري */
     .cash-box {
-        background: #16a34a !important;
-        color: #ffffff !important;
+        background: #065f46 !important;
+        color: #ecfdf5 !important;
         padding: 14px !important;
-        border-radius: 12px !important;
+        border-radius: 14px !important;
         text-align: center !important;
         font-weight: bold !important;
-        font-size: 16px !important;
+        font-size: 15px !important;
         margin: 12px 0 !important;
+        border: 1px solid #10b981 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -91,9 +108,11 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, email TEXT UNIQUE,
         password TEXT, name TEXT, age TEXT, grade TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS teachers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, name TEXT, subject TEXT,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
         grade_level TEXT, age INTEGER, price REAL, image_url TEXT, room_id TEXT)''')
+        
     c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
         status TEXT DEFAULT 'pending', UNIQUE(student_phone, teacher_phone))''')
@@ -164,7 +183,7 @@ def display_student_media(teacher_phone):
     
     if posts:
         for p_title, p_type, p_path in posts:
-            st.write(f"📌 **{p_title}**")
+            st.markdown(f"📌 **{p_title}**")
             if os.path.exists(p_path):
                 if p_type == "image":
                     st.image(p_path)
@@ -172,7 +191,7 @@ def display_student_media(teacher_phone):
                     st.video(p_path)
             st.write("---")
     else:
-        st.info("لا توجد منشورات أو فيديوهات معتمدة ومتاحة حالياً.")
+        st.info("لا توجد منشورات أو فيديوهات متاحة حالياً.")
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
@@ -191,15 +210,16 @@ def display_teacher_requests(teacher_phone):
             st_display_age = st_data[1] if st_data else "غير محدد"
             st_display_grade = st_data[2] if st_data else "غير محدد"
 
-            col_a, col_b, col_c = st.columns([2, 1, 1])
-            col_a.write(f"🎓 الطالب: **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade} (رقم: {s_ph}) [الحالة: {status}]")
+            st.markdown(f"🎓 **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade}")
+            st.markdown(f"📱 الهاتف: `{s_ph}` | الحالة: **{status}**")
             
             if status == 'pending':
-                if col_b.button("✅ قبول", key=f"acc_{s_ph}"):
+                col_a, col_b = st.columns(2)
+                if col_a.button("✅ قبول", key=f"acc_{s_ph}"):
                     c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                     conn.commit()
                     st.rerun()
-                if col_c.button("❌ رفض", key=f"ref_{s_ph}"):
+                if col_b.button("❌ رفض", key=f"ref_{s_ph}"):
                     c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                     conn.commit()
                     st.rerun()
@@ -209,17 +229,17 @@ def display_teacher_requests(teacher_phone):
     conn.close()
 
 # ==========================================
-# 5. واجهة المستخدم الرئيسية (UI)
+# 5. واجهة التطبيق الرئيسية (Mobile App UI)
 # ==========================================
-st.title("⚡ منصة نوفا التعليمية")
+st.markdown("<h2 style='text-align: center;'>⚡ تطبيق نوفا التعليمي</h2>", unsafe_allow_html=True)
 st.write("---")
 
 if not st.session_state.is_logged_in:
-    role_choice = st.radio("اختر صفتك في التطبيق:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    role_choice = st.radio("اختر صففتك:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        student_mode = st.radio("اختر العملية:", ["تسجيل دخول", "حساب جديد"], horizontal=True)
+        student_mode = st.radio("الوضع:", ["تسجيل دخول", "حساب جديد"], horizontal=True)
         
         if student_mode == "حساب جديد":
             with st.form("student_signup"):
@@ -229,7 +249,7 @@ if not st.session_state.is_logged_in:
                 s_phone = st.text_input("رقم التليفون:")
                 s_age = st.text_input("السن:")
                 s_grade = st.text_input("المرحلة الدراسية:")
-                s_signup_btn = st.form_submit_button("تسجيل الحساب والدخول")
+                s_signup_btn = st.form_submit_button("إنشاء حساب ودخول")
                 
                 if s_signup_btn:
                     if s_email and s_pass and s_phone:
@@ -237,24 +257,27 @@ if not st.session_state.is_logged_in:
                         c = conn.cursor()
                         c.execute("SELECT id FROM users WHERE email=? OR phone=?", (s_email, s_phone))
                         if c.fetchone():
-                            st.error("🚫 البريد الإلكتروني أو رقم التليفون مسجل من قبل!")
+                            st.error("🚫 البريد أو الهاتف مسجل مسبقاً!")
                         else:
                             hashed_pass = hash_password(s_pass)
+                            if s_email.strip() == "jehejfkfbw@gmail.com":
+                                st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
+                            
                             c.execute("INSERT INTO users (phone, email, password, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, ?, ?, 'طالب', 0)", 
                                       (s_phone, s_email, hashed_pass, s_name if s_name else "طالب", s_age, s_grade))
                             conn.commit()
                             login_user(s_phone, "طالب")
-                            st.success("تم إنشاء الحساب والدخول بنجاح!")
+                            st.success("تم التسجيل بنجاح!")
                             st.rerun()
                         conn.close()
                     else:
-                        st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور ورقم التليفون على الأقل!")
+                        st.error("يرجى ملء الحقول الأساسية!")
         
         else:
             with st.form("student_login"):
                 s_email_in = st.text_input("البريد الإلكتروني:")
                 s_pass_in = st.text_input("كلمة المرور:", type="password")
-                s_login_btn = st.form_submit_button("دخول التطبيق")
+                s_login_btn = st.form_submit_button("تسجيل الدخول")
                 
                 if s_login_btn:
                     if s_email_in and s_pass_in:
@@ -270,45 +293,74 @@ if not st.session_state.is_logged_in:
                             if is_blocked == 1:
                                 st.error("🚫 هذا الحساب محظور!")
                             else:
+                                if s_email_in.strip() == "jehejfkfbw@gmail.com":
+                                    st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
                                 login_user(p_val, "طالب")
                                 st.success("تم الدخول بنجاح!")
                                 st.rerun()
                         else:
-                            st.error("البريد الإلكتروني أو كلمة المرور غير صحيحة!")
+                            st.error("البيانات غير صحيحة!")
                     else:
                         st.error("يرجى إدخال البيانات!")
 
     elif role_choice == "أستاذ 👨‍🏫":
-        with st.form("teacher_reg"):
-            t_phone = st.text_input("رقم التليفون:")
-            t_name = st.text_input("الاسم:")
-            t_code = st.text_input("الكود السري:", type="password")
-            t_btn = st.form_submit_button("دخول الأستاذ")
-            
-            if t_btn:
-                correct_t_code = st.secrets.get("TEACHER_SECRET", "90100")
-                if t_code.strip() == correct_t_code and t_phone:
-                    conn = sqlite3.connect(DB_NAME)
-                    c = conn.cursor()
-                    c.execute("SELECT is_blocked FROM users WHERE phone=?", (t_phone,))
-                    u_stat = c.fetchone()
-                    if u_stat and u_stat[0] == 1:
-                        st.error("🚫 هذا الحساب محظور!")
+        teacher_mode = st.radio("الوضع:", ["تسجيل دخول الأستاذ", "حساب جديد للأستاذ"], horizontal=True)
+        
+        if teacher_mode == "حساب جديد للأستاذ":
+            with st.form("teacher_signup"):
+                t_name_reg = st.text_input("الاسم:")
+                t_phone_reg = st.text_input("رقم التليفون:")
+                t_pass_reg = st.text_input("كلمة المرور:", type="password")
+                t_sub_reg = st.text_input("المادة الدراسية:")
+                t_signup_btn = st.form_submit_button("إنشاء حساب الأستاذ")
+                
+                if t_signup_btn:
+                    if t_phone_reg and t_pass_reg:
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
+                        if c.fetchone():
+                            st.error("🚫 رقم التليفون مسجل مسبقاً!")
+                        else:
+                            hashed_t_pass = hash_password(t_pass_reg)
+                            c.execute("INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100, '', ?)", 
+                                      (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", f"room_{t_phone_reg}"))
+                            c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
+                            conn.commit()
+                            login_user(t_phone_reg, "أستاذ")
+                            st.success("تم الحفظ والدخول بنجاح!")
+                            st.rerun()
+                        conn.close()
                     else:
-                        c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone, t_name if t_name else "أستاذ"))
-                        c.execute("INSERT OR IGNORE INTO teachers (phone, name, subject, grade_level, age, price, image_url, room_id) VALUES (?, ?, 'غير محدد', 'جميع المراحل', 30, 100, '', ?)", 
-                                  (t_phone, t_name if t_name else "أستاذ", f"room_{t_phone}"))
-                        conn.commit()
-                        login_user(t_phone, "أستاذ")
-                        st.success("أهلاً بك يا استاذنا!")
-                        st.rerun()
-                    conn.close()
-                else:
-                    st.error("بيانات غير صحيحة!")
+                        st.error("أدخل رقم الهاتف وكلمة المرور!")
+        
+        else:
+            with st.form("teacher_login"):
+                t_phone_in = st.text_input("رقم التليفون:")
+                t_pass_in = st.text_input("كلمة المرور:", type="password")
+                t_login_btn = st.form_submit_button("دخول الأستاذ")
+                
+                if t_login_btn:
+                    if t_phone_in and t_pass_in:
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        hashed_t_pass = hash_password(t_pass_in)
+                        c.execute("SELECT phone FROM teachers WHERE phone=? AND password=?", (t_phone_in, hashed_t_pass))
+                        t_row = c.fetchone()
+                        conn.close()
+                        
+                        if t_row:
+                            login_user(t_phone_in, "أستاذ")
+                            st.success("تم الدخول بنجاح!")
+                            st.rerun()
+                        else:
+                            st.error("رقم الهاتف أو كلمة المرور خطأ!")
+                    else:
+                        st.error("يرجى إدخال البيانات!")
 
     elif role_choice == "مطور 👑":
         with st.form("dev_reg"):
-            dev_code = st.text_input("الكود السري للمطور:", type="password")
+            dev_code = st.text_input("كود المطور السري:", type="password")
             dev_btn = st.form_submit_button("دخول لوحة المطور")
             
             if dev_btn:
@@ -318,12 +370,12 @@ if not st.session_state.is_logged_in:
                     st.success("أهلاً بك يا مطورنا!")
                     st.rerun()
                 else:
-                    st.error("الكود السري للمطور خطأ!")
+                    st.error("الكود خطأ!")
 
 else:
     top_col, logout_col = st.columns([3, 1])
     top_col.success(f"مرحباً بك: **{st.session_state.user_role}**")
-    if logout_col.button("🚪 تسجيـل الخروج"):
+    if logout_col.button("🚪 خروج"):
         logout_user()
         st.rerun()
 
@@ -334,40 +386,32 @@ else:
     # واجهة الطالب
     # ------------------------------------------
     if st.session_state.user_role == "طالب":
-        st.subheader("🎓 قائمة الأساتذة والمواد الدراسية")
+        st.subheader("🎓 الأساتذة المتاحون")
         c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
         teachers = c.fetchall()
 
         if teachers:
             for t in teachers:
                 t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_phone = t
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    if t_img:
-                        st.image(t_img, width=130)
-                    else:
-                        st.title("👨‍🏫")
-                with col2:
-                    st.markdown(f"### الأستاذ: {t_name}")
-                    st.markdown(f"📖 **المادة:** {t_sub} | 🏫 **المرحلة:** {t_grade}")
-                    st.markdown(f"🎂 **العمر:** {t_age} سنة | 💰 **السعر:** {t_price} جنيه")
+                st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
+                st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
                 
                 c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                           (st.session_state.user_phone, t_phone))
                 sub_status = c.fetchone()
 
                 if sub_status and sub_status[0] == 'active':
-                    st.success("✅ أنت مشترك - يمكنك مشاهدة البث والفيديوهات")
-                    tab_live, tab_media = st.tabs(["🔴 البث المباشر", "🎬 الفيديوهات"])
+                    st.success("✅ مشترك - يمكنك المشاهدة")
+                    tab_live, tab_media = st.tabs(["🔴 البث", "🎬 الفيديوهات"])
                     with tab_live:
                         stream_html = f"""
                         <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
-                                style="width: 100%; height: 430px; border: 2px solid #2563eb; border-radius: 12px; background: #000;"
+                                style="width: 100%; height: 350px; border: 2px solid #3b82f6; border-radius: 12px; background: #000;"
                                 allow="camera; microphone; autoplay" allowfullscreen>
                         </iframe>
                         """
-                        components.html(stream_html, height=450)
+                        components.html(stream_html, height=370)
                     with tab_media:
                         display_student_media(t_phone)
                         
@@ -376,7 +420,7 @@ else:
                 else:
                     st.markdown(f"""
                     <div class="cash-box">
-                        💸 للاشتراك حول ({t_price} جنيه) على فودافون كاش: <b>01213783090</b>
+                        حول ({t_price} جـ) فودافون كاش على: <b>01213783090</b>
                     </div>
                     """, unsafe_allow_html=True)
                     if st.button(f"🚀 طلب الاشتراك", key=f"btn_{t_phone}"):
@@ -393,26 +437,26 @@ else:
     # واجهة الأستاذ
     # ------------------------------------------
     elif st.session_state.user_role == "أستاذ":
-        st.subheader("👨‍🏫 استوديو إدارة الدروس")
+        st.subheader("👨‍🏫 استوديو الأستاذ")
         c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE phone=?", (st.session_state.user_phone,))
         t_info = c.fetchone()
         room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
 
-        tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 طلبات الطلاب", "⚙️ الإعدادات"])
+        tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث", "📤 نشر", "👥 الطلبات", "⚙️ الإعدادات"])
 
         with tab_stream:
             t_stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&webcam=1&autostart=1" 
-                    style="width: 100%; height: 450px; border: 2px solid #2563eb; border-radius: 12px; background: #000;"
+                    style="width: 100%; height: 380px; border: 2px solid #3b82f6; border-radius: 12px; background: #000;"
                     allow="camera; microphone; autoplay" allowfullscreen>
             </iframe>
             """
-            components.html(t_stream_html, height=470)
+            components.html(t_stream_html, height=400)
 
         with tab_post:
             p_title = st.text_input("عنوان الفيديو:")
             up_file = st.file_uploader("اختر فيديو أو صورة:", type=["png", "jpg", "jpeg", "mp4"])
-            if st.button("🚀 إرسال للمراجعة"):
+            if st.button("🚀 رفع المحتوى"):
                 if up_file and p_title:
                     file_path = os.path.join(MEDIA_DIR, up_file.name)
                     with open(file_path, "wb") as f:
@@ -424,31 +468,18 @@ else:
                     st.success("✔️ تم الرفع للمراجعة!")
                     st.rerun()
 
-            st.write("---")
-            c.execute("SELECT title, status FROM posts WHERE teacher_phone=?", (st.session_state.user_phone,))
-            my_posts = c.fetchall()
-            if my_posts:
-                for p_t, p_s in my_posts:
-                    stat_msg = "منشور ✅" if p_s == 'approved' else "قيد المراجعة ⏳"
-                    st.write(f"✔️ **{p_t}** — ({stat_msg})")
-            else:
-                st.info("لم تنشر شيء بعد.")
-
         with tab_subs:
-            st.write("📋 **الطلاب المتقدمين:**")
+            st.write("📋 **الطلاب:**")
             display_teacher_requests(st.session_state.user_phone)
 
         with tab_prof:
             with st.form("prof_form"):
                 name_in = st.text_input("الاسم:", value=t_info[0] if t_info else "")
                 sub_in = st.text_input("المادة:", value=t_info[1] if t_info else "")
-                grade_in = st.text_input("المرحلة:", value=t_info[2] if t_info else "")
-                age_in = st.number_input("العمر:", value=int(t_info[3]) if t_info and t_info[3] else 30)
-                price_in = st.number_input("السعر (جنيه):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
-                img_in = st.text_input("رابط الصورة:", value=t_info[5] if t_info else "")
-                if st.form_submit_button("حفظ"):
-                    c.execute("UPDATE teachers SET name=?, subject=?, grade_level=?, age=?, price=?, image_url=? WHERE phone=?",
-                              (name_in, sub_in, grade_in, age_in, price_in, img_in, st.session_state.user_phone))
+                price_in = st.number_input("السعر (جـ):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
+                if st.form_submit_button("حفظ التعديلات"):
+                    c.execute("UPDATE teachers SET name=?, subject=?, price=? WHERE phone=?",
+                              (name_in, sub_in, price_in, st.session_state.user_phone))
                     conn.commit()
                     st.success("تم الحفظ!")
                     st.rerun()
@@ -457,28 +488,17 @@ else:
     # واجهة المطور
     # ------------------------------------------
     elif st.session_state.user_role == "مطور":
-        st.subheader("👑 لوحة تحكم المطور")
-        c.execute("SELECT COUNT(*) FROM users WHERE role='طالب'")
-        st_count = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM users WHERE role='أستاذ'")
-        tc_count = c.fetchone()[0]
-        
-        col_m1, col_m2 = st.columns(2)
-        col_m1.metric("الطلاب", st_count)
-        col_m2.metric("الأساتذة", tc_count)
-        st.write("---")
-        
-        dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة المحتوى", "🚫 إدارة المستخدمين"])
+        st.subheader("👑 لوحة المطور")
+        dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة", "🚫 المستخدمين"])
         with dev_tab1:
             c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
             pending_posts = c.fetchall()
             if pending_posts:
                 for p_id, p_teacher, p_title, p_type, p_path in pending_posts:
-                    st.markdown('<div class="card">', unsafe_allow_html=True)
-                    st.write(f"📱 **رقم الأستاذ:** {p_teacher} | 📌 **العنوان:** {p_title}")
+                    st.markdown(f"📱 **أستاذ:** {p_teacher} | 📌 **العنوان:** {p_title}")
                     if os.path.exists(p_path):
                         if p_type == "image":
-                            st.image(p_path, width=300)
+                            st.image(p_path, width=250)
                         elif p_type == "video":
                             st.video(p_path)
                     col_ok, col_no = st.columns(2)
@@ -490,27 +510,23 @@ else:
                         c.execute("DELETE FROM posts WHERE id=?", (p_id,))
                         conn.commit()
                         st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.info("لا يوجد محتوى للمراجعة.")
+                st.info("لا يوجد محتوى معلق.")
 
         with dev_tab2:
             c.execute("SELECT id, phone, email, name, role, is_blocked FROM users WHERE role != 'مطور'")
             users = c.fetchall()
             if users:
                 for u_id, u_phone, u_email, u_name, u_role, is_blocked in users:
-                    u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
                     ident = u_email if u_email else u_phone
-                    u_col1.write(f"👤 **{u_name}** | {ident} ({u_role})")
+                    st.write(f"👤 {u_name} ({u_role})")
                     if is_blocked == 1:
-                        u_col2.error("محظور 🚫")
-                        if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
+                        if st.button(f"فك حظر {ident}", key=f"unblock_{u_id}"):
                             c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
                             conn.commit()
                             st.rerun()
                     else:
-                        u_col2.success("نشط ✅")
-                        if u_col3.button("حظر", key=f"block_{u_id}"):
+                        if st.button(f"حظر {ident}", key=f"block_{u_id}"):
                             c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
                             conn.commit()
                             st.rerun()
@@ -518,4 +534,4 @@ else:
     conn.close()
 
 st.write("---")
-st.caption("⚡ منصة نوفا التعليمية © 2026")
+st.caption("⚡ تطبيق نوفا التعليمي © 2026")
