@@ -110,7 +110,7 @@ st.markdown("""
     }
 
     .stButton>button:hover {
-        background: linear-gradient(90deg, #1d4ed8 0%, #1e40af 100%) !important;
+        background: linear-gradient(90deg, #1d4ed8 100%, #1e40af 100%) !important;
         transform: translateY(-2px);
     }
 
@@ -136,18 +136,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 4. حفظ الجلسة (تسجيل دخول دائم) ====================
+# ==================== 4. إدارة الجلسة والدخول الدائم ====================
 params = st.query_params
 
-if "user_email" in params and "user_role" in params:
-    st.session_state.is_logged_in = True
-    st.session_state.user_email = params["user_email"]
-    st.session_state.user_role = params["user_role"]
-else:
-    if "is_logged_in" not in st.session_state:
-        st.session_state.is_logged_in = False
-        st.session_state.user_role = None
-        st.session_state.user_email = ""
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
+    st.session_state.user_role = None
+    st.session_state.user_email = ""
+
+# التحقق التلقائي من الـ Query Params لتثبيت الدخول مرة واحدة
+if not st.session_state.is_logged_in and "user_email" in params and "user_role" in params:
+    q_email = params["user_email"]
+    q_role = params["user_role"]
+    
+    # التحقق من أن المستخدم غير محظور في قاعدة البيانات
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT is_blocked FROM users WHERE email=?", (q_email,))
+    res = c.fetchone()
+    conn.close()
+    
+    if not res or res[0] == 0:
+        st.session_state.is_logged_in = True
+        st.session_state.user_email = q_email
+        st.session_state.user_role = q_role
 
 def save_login(email, role):
     st.session_state.is_logged_in = True
@@ -357,14 +369,12 @@ else:
                               (st.session_state.user_email, p_title, f_type, file_path))
                     conn.commit()
                     
-                    # علامة الصح والتنبيه الفوري للأستاذ
                     st.success("✔️ تم رفع الفيديو وإرساله بنجاح! هو الآن بانتظار موافقة المطور قبل ظهوره للطلاب.")
                     st.rerun()
 
             st.write("---")
             st.write("📊 **حالة الفيديوهات والمنشورات الخاصة بك:**")
             
-            # عرض حالة المحتوى المرفوع للأستاذ مع علامة الصح
             c.execute("SELECT title, status FROM posts WHERE teacher_email=?", (st.session_state.user_email,))
             my_posts = c.fetchall()
             
