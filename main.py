@@ -126,7 +126,7 @@ def init_db():
         if "room_id" not in existing_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
-        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '1900')")
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '901000')")
         conn.commit()
 
 init_db()
@@ -335,11 +335,11 @@ if not st.session_state.is_logged_in:
                 t_name_reg = st.text_input("اسم الأستاذ:")
                 t_phone_reg = st.text_input("رقم المحمول:")
                 t_sub_reg = st.text_input("المادة الدراسية:")
-                t_secret_code = st.text_input("الكود السري (1900):", type="password")
+                t_secret_code = st.text_input("الكود السري:", type="password")
                 t_signup_btn = st.form_submit_button("إنشاء الحساب وحفظه في السيستم")
                 
                 if t_signup_btn:
-                    correct_teacher_code = get_setting("teacher_secret", "1900")
+                    correct_teacher_code = get_setting("teacher_secret", "901000")
                     if t_secret_code.strip() != correct_teacher_code:
                         st.error("🚫 الكود السري غير صحيح!")
                     elif t_phone_reg and t_name_reg:
@@ -368,11 +368,11 @@ if not st.session_state.is_logged_in:
             with st.form("teacher_login"):
                 st.subheader("تسجيل دخول الأستاذ")
                 t_phone_in = st.text_input("رقم المحمول:")
-                t_secret_in = st.text_input("الكود السري (1900):", type="password")
+                t_secret_in = st.text_input("الكود السري:", type="password")
                 t_login_btn = st.form_submit_button("دخول الأستاذ")
                 
                 if t_login_btn:
-                    correct_teacher_code = get_setting("teacher_secret", "1900")
+                    correct_teacher_code = get_setting("teacher_secret", "901000")
                     if t_secret_in.strip() != correct_teacher_code:
                         st.error("🚫 الكود السري غير صحيح!")
                     elif t_phone_in:
@@ -586,7 +586,7 @@ else:
                             if c.fetchone():
                                 st.error("رقم المحمول مسجل مسبقاً لأستاذ آخر في السيستم!")
                             else:
-                                hashed_tp = hash_password("1900")
+                                hashed_tp = hash_password("901000")
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
                                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                           (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
@@ -647,9 +647,9 @@ else:
 
         with dev_tab4:
             st.write("⚙️ **إعدادات المنصة:**")
-            current_secret = get_setting("teacher_secret", "1900")
+            current_secret = get_setting("teacher_secret", "901000")
             with st.form("settings_form"):
-                new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret)
+                new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret, type="password")
                 save_settings_btn = st.form_submit_button("حفظ التغييرات")
                 if save_settings_btn:
                     update_setting("teacher_secret", new_secret_input.strip())
