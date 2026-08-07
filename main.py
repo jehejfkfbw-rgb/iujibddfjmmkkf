@@ -1,12 +1,13 @@
 import streamlit as st
 import sqlite3
 import os
+import streamlit.components.v1 as components
 
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
     os.makedirs(MEDIA_DIR)
 
-DB_NAME = 'nova_secure_v2.db'
+DB_NAME = 'nova_student_v5.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -16,8 +17,9 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone TEXT UNIQUE,
             name TEXT,
-            role TEXT,
+            age TEXT,
             grade TEXT,
+            role TEXT,
             is_blocked INTEGER DEFAULT 0
         )
     ''')
@@ -112,7 +114,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# استخدام الذاكرة الداخلية لـ Streamlit لتثبيت الجلسة فوراً وبدون تأخير
 if "is_logged_in" not in st.session_state:
     st.session_state.is_logged_in = False
     st.session_state.user_role = None
@@ -126,15 +127,16 @@ if not st.session_state.is_logged_in:
     st.write("---")
 
     if role_choice == "طالب 👨‍🎓":
-        st.subheader("👨‍🎓 دخول الطالب (تسجيل لأول مرة)")
+        st.subheader("👨‍🎓 تسجيـل الطالـب (مرة واحدة فقط)")
         with st.form("student_reg"):
             s_phone = st.text_input("رقم التليفون:")
             s_name = st.text_input("الاسم الكامل:")
-            s_grade = st.text_input("سنتك كام (المرحلة الدراسية):")
+            s_age = st.text_input("عنده كم سنة؟:")
+            s_grade = st.text_input("المرحلة الدراسية:")
             s_btn = st.form_submit_button("دخول المنصة")
             
             if s_btn:
-                if s_phone and s_name:
+                if s_phone and s_name and s_age and s_grade:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     c.execute("SELECT is_blocked FROM users WHERE phone=?", (s_phone,))
@@ -142,20 +144,21 @@ if not st.session_state.is_logged_in:
                     if u_stat and u_stat[0] == 1:
                         st.error("🚫 هذا الحساب محظور من قبل المطور!")
                     else:
-                        c.execute("INSERT OR REPLACE INTO users (phone, name, role, grade, is_blocked) VALUES (?, ?, 'طالب', ?, 0)", (s_phone, s_name, s_grade))
+                        c.execute("INSERT OR REPLACE INTO users (phone, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, 'طالب', 0)", 
+                                  (s_phone, s_name, s_age, s_grade))
                         conn.commit()
                         conn.close()
 
                         st.session_state.is_logged_in = True
                         st.session_state.user_phone = s_phone
                         st.session_state.user_role = "طالب"
-                        st.success("تم الدخول بنجاح!")
+                        st.success("تم تسجيل الدخول بنجاح ولن تحتاج لإعادته!")
                         st.rerun()
                 else:
-                    st.error("يرجى إدخال رقم التليفون والاسم!")
+                    st.error("يرجى إكمال جميع بيانات الطالب!")
 
     elif role_choice == "أستاذ 👨‍🏫":
-        st.subheader("👨‍🏫 دخول الأستاذ (بالكود السري فقط 90100)")
+        st.subheader("👨‍🏫 دخول الأستاذ")
         with st.form("teacher_reg"):
             t_phone = st.text_input("رقم التليفون:")
             t_name = st.text_input("الاسم:")
@@ -163,7 +166,8 @@ if not st.session_state.is_logged_in:
             t_btn = st.form_submit_button("دخول الأستاذ")
             
             if t_btn:
-                if t_code.strip() == "90100" and t_phone:
+                correct_t_code = st.secrets.get("TEACHER_SECRET", "90100")
+                if t_code.strip() == correct_t_code and t_phone:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     c.execute("SELECT is_blocked FROM users WHERE phone=?", (t_phone,))
@@ -183,23 +187,24 @@ if not st.session_state.is_logged_in:
                         st.success("أهلاً بك يا استاذنا!")
                         st.rerun()
                 else:
-                    st.error("الكود السري خطأ (الكود هو 90100) أو رقم التليفون فارغ!")
+                    st.error("الكود السري خطأ أو رقم التليفون فارغ!")
 
     elif role_choice == "مطور 👑":
-        st.subheader("👑 دخول المطور (بالكود السري فقط 900800)")
+        st.subheader("👑 دخول المطور")
         with st.form("dev_reg"):
             dev_code = st.text_input("الكود السري للمطور:", type="password")
             dev_btn = st.form_submit_button("دخول لوحة المطور")
             
             if dev_btn:
-                if dev_code.strip() == "900800":
+                correct_dev_code = st.secrets.get("DEV_SECRET", "900800")
+                if dev_code.strip() == correct_dev_code:
                     st.session_state.is_logged_in = True
                     st.session_state.user_phone = "dev_admin"
                     st.session_state.user_role = "مطور"
                     st.success("أهلاً بك يا مطورنا!")
                     st.rerun()
                 else:
-                    st.error("الكود السري للمطور خطأ (الكود هو 900800)!")
+                    st.error("الكود السري للمطور خطأ!")
 
 else:
     top_col, logout_col = st.columns([3, 1])
@@ -331,13 +336,14 @@ else:
             subs = c.fetchall()
             if subs:
                 for s_ph, status in subs:
-                    c.execute("SELECT name, grade FROM users WHERE phone=?", (s_ph,))
+                    c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
-                    st_display_grade = st_data[1] if st_data else "غير محدد"
+                    st_display_age = st_data[1] if st_data else "غير محدد"
+                    st_display_grade = st_data[2] if st_data else "غير محدد"
 
                     col_a, col_b, col_c = st.columns([2, 1, 1])
-                    col_a.write(f"🎓 الطالب: **{st_display_name}** (رقم: {s_ph} - سنة: {st_display_grade}) [الحالة: {status}]")
+                    col_a.write(f"🎓 الطالب: **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade} (رقم: {s_ph}) [الحالة: {status}]")
                     if status == 'pending':
                         if col_b.button("✅ قبول وتفعيل", key=f"acc_{s_ph}"):
                             c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, st.session_state.user_phone))
@@ -405,12 +411,12 @@ else:
                 st.info("لا توجد فيديوهات أو منشورات جديدة تنتظر المراجعة.")
 
         with dev_tab2:
-            c.execute("SELECT id, phone, name, role, is_blocked FROM users WHERE role != 'مطور'")
+            c.execute("SELECT id, phone, name, age, grade, role, is_blocked FROM users WHERE role != 'مطور'")
             users = c.fetchall()
             if users:
-                for u_id, u_phone, u_name, u_role, is_blocked in users:
+                for u_id, u_phone, u_name, u_age, u_grade, u_role, is_blocked in users:
                     u_col1, u_col2, u_col3 = st.columns([2, 1, 1])
-                    u_col1.write(f"👤 **{u_name}** (رقم: {u_phone} - {u_role})")
+                    u_col1.write(f"👤 **{u_name}** | السن: {u_age} | المرحلة: {u_grade} (رقم: {u_phone} - {u_role})")
                     if is_blocked == 1:
                         u_col2.error("محظور 🚫")
                         if u_col3.button("فك الحظر", key=f"unblock_{u_id}"):
