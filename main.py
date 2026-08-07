@@ -183,7 +183,7 @@ def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
     st.session_state.user_role = role
-    cookie_controller.set('nova_phone', phone, max_age=31536000) # تخزين لمدة سنة كاملة
+    cookie_controller.set('nova_phone', phone, max_age=31536000)
     cookie_controller.set('nova_role', role, max_age=31536000)
 
 def logout_user():
@@ -607,7 +607,7 @@ else:
                                 hashed_tp = hash_password(new_t_pass)
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
                                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                      (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
+                                          (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                                 conn.commit()
                                 st.success("تم إضافة الأستاذ بنجاح!")
