@@ -4,11 +4,14 @@ import os
 import streamlit.components.v1 as components
 import hashlib
 from streamlit_autorefresh import st_autorefresh
+from streamlit_cookies_controller import CookieController
 
 # ==========================================
 # 1. إعدادات التطبيق وتصميم الواجهة النظيفة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
+
+cookie_controller = CookieController()
 
 st.markdown("""
 <style>
@@ -89,88 +92,82 @@ if not os.path.exists(MEDIA_DIR):
 DB_NAME = 'nova_complete_system.db'
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, email TEXT UNIQUE,
-        password TEXT, name TEXT, age TEXT, grade TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS teachers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
-        grade_level TEXT, age INTEGER, price REAL, image_url TEXT, room_id TEXT)''')
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
         
-    c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-        status TEXT DEFAULT 'pending', UNIQUE(student_phone, teacher_phone))''')
+        c.execute('''CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, email TEXT UNIQUE,
+            password TEXT, name TEXT, age TEXT, grade TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
         
-    c.execute('''CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
-        media_type TEXT, file_path TEXT, status TEXT DEFAULT 'pending')''')
+        c.execute('''CREATE TABLE IF NOT EXISTS teachers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
+            grade_level TEXT, age INTEGER, price REAL, image_url TEXT, room_id TEXT)''')
+            
+        c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
+            status TEXT DEFAULT 'pending', UNIQUE(student_phone, teacher_phone))''')
+            
+        c.execute('''CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
+            media_type TEXT, file_path TEXT, status TEXT DEFAULT 'pending')''')
 
-    c.execute('''CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY, value TEXT)''')
-    
-    existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
-    if "grade_level" not in existing_columns:
-        c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
-    if "age" not in existing_columns:
-        c.execute("ALTER TABLE teachers ADD COLUMN age INTEGER DEFAULT 30")
-    if "price" not in existing_columns:
-        c.execute("ALTER TABLE teachers ADD COLUMN price REAL DEFAULT 100.0")
-    if "image_url" not in existing_columns:
-        c.execute("ALTER TABLE teachers ADD COLUMN image_url TEXT DEFAULT ''")
-    if "room_id" not in existing_columns:
-        c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
+        c.execute('''CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY, value TEXT)''')
+        
+        existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
+        if "grade_level" not in existing_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
+        if "age" not in existing_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN age INTEGER DEFAULT 30")
+        if "price" not in existing_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN price REAL DEFAULT 100.0")
+        if "image_url" not in existing_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN image_url TEXT DEFAULT ''")
+        if "room_id" not in existing_columns:
+            c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
-    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
-    
-    conn.commit()
-    conn.close()
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
+        conn.commit()
 
 init_db()
 
 def get_setting(key, default=""):
     try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("SELECT value FROM settings WHERE key=?", (key,))
-        row = c.fetchone()
-        conn.close()
-        return row[0] if row else default
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?", (key,))
+            row = c.fetchone()
+            return row[0] if row else default
     except:
         return default
 
 def update_setting(key, value):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
-# 3. إدارة الجلسات واسترجاعها من الرابط
+# 3. إدارة الجلسات عبر الـ Cookies الدائمة
 # ==========================================
 if "is_logged_in" not in st.session_state:
-    params = st.query_params
-    qp_phone = params.get("phone", None)
-    qp_role = params.get("role", None)
+    saved_phone = cookie_controller.get('nova_phone')
+    saved_role = cookie_controller.get('nova_role')
     
-    if qp_phone and qp_role:
+    if saved_phone and saved_role:
         try:
-            conn = sqlite3.connect(DB_NAME)
-            c = conn.cursor()
-            c.execute("SELECT is_blocked FROM users WHERE phone=?", (qp_phone,))
-            row = c.fetchone()
-            conn.close()
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT is_blocked FROM users WHERE phone=?", (saved_phone,))
+                row = c.fetchone()
             
             if row and row[0] == 0:
                 st.session_state.is_logged_in = True
-                st.session_state.user_phone = qp_phone
-                st.session_state.user_role = qp_role
+                st.session_state.user_phone = saved_phone
+                st.session_state.user_role = saved_role
             else:
                 st.session_state.is_logged_in = False
                 st.session_state.user_phone = ""
@@ -186,14 +183,15 @@ def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
     st.session_state.user_role = role
-    st.query_params["phone"] = phone
-    st.query_params["role"] = role
+    cookie_controller.set('nova_phone', phone, max_age=31536000) # تخزين لمدة سنة كاملة
+    cookie_controller.set('nova_role', role, max_age=31536000)
 
 def logout_user():
     st.session_state.is_logged_in = False
     st.session_state.user_phone = ""
     st.session_state.user_role = None
-    st.query_params.clear()
+    cookie_controller.set('nova_phone', '', max_age=0)
+    cookie_controller.set('nova_role', '', max_age=0)
 
 # ==========================================
 # 4. التحديثات التلقائية للمحتوى
@@ -202,11 +200,10 @@ def logout_user():
 def display_student_media(teacher_phone):
     st_autorefresh(interval=5000, key=f"refresh_media_{teacher_phone}")
     try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_phone=? AND status='approved' ORDER BY id DESC", (teacher_phone,))
-        posts = c.fetchall()
-        conn.close()
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT title, media_type, file_path FROM posts WHERE teacher_phone=? AND status='approved' ORDER BY id DESC", (teacher_phone,))
+            posts = c.fetchall()
         
         if posts:
             for p_title, p_type, p_path in posts:
@@ -226,36 +223,35 @@ def display_student_media(teacher_phone):
 def display_teacher_requests(teacher_phone):
     st_autorefresh(interval=5000, key=f"refresh_subs_{teacher_phone}")
     try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
-        subs = c.fetchall()
-        
-        if subs:
-            for s_ph, status in subs:
-                c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
-                st_data = c.fetchone()
-                st_display_name = st_data[0] if st_data else s_ph
-                st_display_age = st_data[1] if st_data else "غير محدد"
-                st_display_grade = st_data[2] if st_data else "غير محدد"
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            subs = c.fetchall()
+            
+            if subs:
+                for s_ph, status in subs:
+                    c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
+                    st_data = c.fetchone()
+                    st_display_name = st_data[0] if st_data else s_ph
+                    st_display_age = st_data[1] if st_data else "غير محدد"
+                    st_display_grade = st_data[2] if st_data else "غير محدد"
 
-                st.markdown(f"🎓 **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade}")
-                st.markdown(f"📱 الهاتف: `{s_ph}` | الحالة: **{status}**")
-                
-                if status == 'pending':
-                    col_a, col_b = st.columns(2)
-                    if col_a.button("✅ قبول", key=f"acc_{s_ph}"):
-                        c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
-                        conn.commit()
-                        st.rerun()
-                    if col_b.button("❌ رفض", key=f"ref_{s_ph}"):
-                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
-                        conn.commit()
-                        st.rerun()
-                st.write("---")
-        else:
-            st.info("لا توجد طلبات اشتراك حالياً.")
-        conn.close()
+                    st.markdown(f"🎓 **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade}")
+                    st.markdown(f"📱 الهاتف: `{s_ph}` | الحالة: **{status}**")
+                    
+                    if status == 'pending':
+                        col_a, col_b = st.columns(2)
+                        if col_a.button("✅ قبول", key=f"acc_{s_ph}"):
+                            c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                            conn.commit()
+                            st.rerun()
+                        if col_b.button("❌ رفض", key=f"ref_{s_ph}"):
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                            conn.commit()
+                            st.rerun()
+                    st.write("---")
+            else:
+                st.info("لا توجد طلبات اشتراك حالياً.")
     except:
         st.info("جارٍ تحديث الطلبات...")
 
@@ -291,23 +287,22 @@ if not st.session_state.is_logged_in:
                 if s_signup_btn:
                     if s_email and s_pass and s_phone:
                         try:
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("SELECT id FROM users WHERE email=? OR phone=?", (s_email, s_phone))
-                            if c.fetchone():
-                                st.error("🚫 البريد الإلكتروني أو رقم الهاتف مسجل مسبقاً!")
-                            else:
-                                hashed_pass = hash_password(s_pass)
-                                if s_email.strip() == "jehejfkfbw@gmail.com":
-                                    st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
-                                
-                                c.execute("INSERT INTO users (phone, email, password, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, ?, ?, 'طالب', 0)", 
-                                          (s_phone, s_email, hashed_pass, s_name if s_name else "طالب", s_age, s_grade))
-                                conn.commit()
-                                login_user(s_phone, "طالب")
-                                st.success("تم التسجيل بنجاح!")
-                                st.rerun()
-                            conn.close()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT id FROM users WHERE email=? OR phone=?", (s_email, s_phone))
+                                if c.fetchone():
+                                    st.error("🚫 البريد الإلكتروني أو رقم الهاتف مسجل مسبقاً!")
+                                else:
+                                    hashed_pass = hash_password(s_pass)
+                                    if s_email.strip() == "jehejfkfbw@gmail.com":
+                                        st.toast("مرحبا بك ايها المطور التنفيذي محمد عادل تبع شركه نوفا")
+                                    
+                                    c.execute("INSERT INTO users (phone, email, password, name, age, grade, role, is_blocked) VALUES (?, ?, ?, ?, ?, ?, 'طالب', 0)", 
+                                              (s_phone, s_email, hashed_pass, s_name if s_name else "طالب", s_age, s_grade))
+                                    conn.commit()
+                                    login_user(s_phone, "طالب")
+                                    st.success("تم التسجيل بنجاح!")
+                                    st.rerun()
                         except:
                             st.error("حدث خطأ أثناء التسجيل، تأكد من صحة البيانات.")
                     else:
@@ -323,12 +318,11 @@ if not st.session_state.is_logged_in:
                 if s_login_btn:
                     if s_email_in and s_pass_in:
                         try:
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            hashed_pass = hash_password(s_pass_in)
-                            c.execute("SELECT phone, is_blocked FROM users WHERE (email=? OR phone=?) AND password=? AND role='طالب'", (s_email_in, s_email_in, hashed_pass))
-                            user_row = c.fetchone()
-                            conn.close()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                hashed_pass = hash_password(s_pass_in)
+                                c.execute("SELECT phone, is_blocked FROM users WHERE (email=? OR phone=?) AND password=? AND role='طالب'", (s_email_in, s_email_in, hashed_pass))
+                                user_row = c.fetchone()
                             
                             if user_row:
                                 p_val, is_blocked = user_row
@@ -369,22 +363,21 @@ if not st.session_state.is_logged_in:
                         st.error("🚫 كود التسجيل السري خطأ تماماً!")
                     elif t_phone_reg and t_pass_reg:
                         try:
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
-                            if c.fetchone():
-                                st.error("🚫 رقم التليفون مسجل مسبقاً لأستاذ آخر!")
-                            else:
-                                hashed_t_pass = hash_password(t_pass_reg)
-                                c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
-                                          (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
-                                c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
-                                conn.commit()
-                                login_user(t_phone_reg, "أستاذ")
-                                st.success("تم الحفظ والدخول بنجاح!")
-                                st.rerun()
-                            conn.close()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
+                                if c.fetchone():
+                                    st.error("🚫 رقم التليفون مسجل مسبقاً لأستاذ آخر!")
+                                else:
+                                    hashed_t_pass = hash_password(t_pass_reg)
+                                    c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
+                                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
+                                              (t_phone_reg, hashed_t_pass, t_name_reg if t_name_reg else "أستاذ", t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
+                                    c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg if t_name_reg else "أستاذ"))
+                                    conn.commit()
+                                    login_user(t_phone_reg, "أستاذ")
+                                    st.success("تم الحفظ والدخول بنجاح!")
+                                    st.rerun()
                         except:
                             st.error("حدث خطأ أثناء حفظ البيانات.")
                     else:
@@ -400,12 +393,11 @@ if not st.session_state.is_logged_in:
                 if t_login_btn:
                     if t_phone_in and t_pass_in:
                         try:
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            hashed_t_pass = hash_password(t_pass_in)
-                            c.execute("SELECT phone FROM teachers WHERE phone=? AND password=?", (t_phone_in, hashed_t_pass))
-                            t_row = c.fetchone()
-                            conn.close()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                hashed_t_pass = hash_password(t_pass_in)
+                                c.execute("SELECT phone FROM teachers WHERE phone=? AND password=?", (t_phone_in, hashed_t_pass))
+                                t_row = c.fetchone()
                             
                             if t_row:
                                 login_user(t_phone_in, "أستاذ")
@@ -443,16 +435,15 @@ else:
         logout_user()
         st.rerun()
 
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-
     # ------------------------------------------
     # واجهة الطالب
     # ------------------------------------------
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 الأساتذة المتاحون")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
-        teachers = c.fetchall()
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id, phone FROM teachers")
+            teachers = c.fetchall()
 
         if teachers:
             for t in teachers:
@@ -461,9 +452,11 @@ else:
                 st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
                 st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
                 
-                c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                          (st.session_state.user_phone, t_phone))
-                sub_status = c.fetchone()
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                              (st.session_state.user_phone, t_phone))
+                    sub_status = c.fetchone()
 
                 if sub_status and sub_status[0] == 'active':
                     st.success("✅ مشترك - يمكنك المشاهدة")
@@ -488,9 +481,11 @@ else:
                     </div>
                     """, unsafe_allow_html=True)
                     if st.button(f"🚀 طلب الاشتراك", key=f"btn_{t_phone}"):
-                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
-                                  (st.session_state.user_phone, t_phone))
-                        conn.commit()
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
+                                      (st.session_state.user_phone, t_phone))
+                            conn.commit()
                         st.success("تم إرسال الطلب!")
                         st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -502,8 +497,10 @@ else:
     # ------------------------------------------
     elif st.session_state.user_role == "أستاذ":
         st.subheader("👨‍🏫 استوديو الأستاذ")
-        c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE phone=?", (st.session_state.user_phone,))
-        t_info = c.fetchone()
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT name, subject, grade_level, age, price, image_url, room_id FROM teachers WHERE phone=?", (st.session_state.user_phone,))
+            t_info = c.fetchone()
         room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
 
         tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث", "📤 نشر", "👥 الطلبات", "⚙️ الإعدادات"])
@@ -526,9 +523,11 @@ else:
                     with open(file_path, "wb") as f:
                         f.write(up_file.getbuffer())
                     f_type = "video" if up_file.type.startswith("video") else "image"
-                    c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
-                              (st.session_state.user_phone, p_title, f_type, file_path))
-                    conn.commit()
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
+                                  (st.session_state.user_phone, p_title, f_type, file_path))
+                        conn.commit()
                     st.success("✔️ تم الرفع للمراجعة!")
                     st.rerun()
 
@@ -542,9 +541,11 @@ else:
                 sub_in = st.text_input("المادة:", value=t_info[1] if t_info else "")
                 price_in = st.number_input("السعر (جـ):", value=float(t_info[4]) if t_info and t_info[4] else 100.0)
                 if st.form_submit_button("حفظ التعديلات"):
-                    c.execute("UPDATE teachers SET name=?, subject=?, price=? WHERE phone=?",
-                              (name_in, sub_in, price_in, st.session_state.user_phone))
-                    conn.commit()
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("UPDATE teachers SET name=?, subject=?, price=? WHERE phone=?",
+                                  (name_in, sub_in, price_in, st.session_state.user_phone))
+                        conn.commit()
                     st.success("تم الحفظ!")
                     st.rerun()
 
@@ -556,8 +557,11 @@ else:
         dev_tab1, dev_tab2, dev_tab3, dev_tab4 = st.tabs(["🎥 مراجعة المحتوى", "👨‍🏫 إدارة الأساتذة", "🚫 المستخدمين", "⚙️ الإعدادات العامة"])
         
         with dev_tab1:
-            c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
-            pending_posts = c.fetchall()
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, teacher_phone, title, media_type, file_path FROM posts WHERE status='pending'")
+                pending_posts = c.fetchall()
+            
             if pending_posts:
                 for p_id, p_teacher, p_title, p_type, p_path in pending_posts:
                     st.markdown(f"📱 **أستاذ:** {p_teacher} | 📌 **العنوان:** {p_title}")
@@ -568,12 +572,16 @@ else:
                             st.video(p_path)
                     col_ok, col_no = st.columns(2)
                     if col_ok.button(f"✅ موافقة", key=f"app_{p_id}"):
-                        c.execute("UPDATE posts SET status='approved' WHERE id=?", (p_id,))
-                        conn.commit()
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("UPDATE posts SET status='approved' WHERE id=?", (p_id,))
+                            conn.commit()
                         st.rerun()
                     if col_no.button(f"❌ رفض", key=f"rej_{p_id}"):
-                        c.execute("DELETE FROM posts WHERE id=?", (p_id,))
-                        conn.commit()
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM posts WHERE id=?", (p_id,))
+                            conn.commit()
                         st.rerun()
             else:
                 st.info("لا يوجد محتوى معلق للمراجعة.")
@@ -590,53 +598,67 @@ else:
                 
                 if add_t_btn:
                     if new_t_phone and new_t_pass and new_t_name:
-                        c.execute("SELECT id FROM teachers WHERE phone=?", (new_t_phone,))
-                        if c.fetchone():
-                            st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
-                        else:
-                            hashed_tp = hash_password(new_t_pass)
-                            c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("SELECT id FROM teachers WHERE phone=?", (new_t_phone,))
+                            if c.fetchone():
+                                st.error("رقم الهاتف مسجل مسبقاً لأستاذ آخر!")
+                            else:
+                                hashed_tp = hash_password(new_t_pass)
+                                c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
+                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                       (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
-                            c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
-                            conn.commit()
-                            st.success("تم إضافة الأستاذ بنجاح!")
-                            st.rerun()
+                                c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
+                                conn.commit()
+                                st.success("تم إضافة الأستاذ بنجاح!")
+                                st.rerun()
                     else:
                         st.error("يرجى إكمال البيانات الأساسية للأستاذ.")
 
             st.write("---")
             st.write("📋 **الأساتذة الحاليون:**")
-            c.execute("SELECT id, name, phone, subject, price FROM teachers")
-            all_teachers = c.fetchall()
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, name, phone, subject, price FROM teachers")
+                all_teachers = c.fetchall()
+            
             if all_teachers:
                 for t_id, t_n, t_p, t_s, t_pr in all_teachers:
                     st.write(f"👨‍🏫 **{t_n}** | المادة: {t_s} | الهاتف: `{t_p}` | السعر: {t_pr} جـ")
                     if st.button(f"🗑️ حذف الأستاذ {t_n}", key=f"del_t_{t_id}"):
-                        c.execute("DELETE FROM teachers WHERE id=?", (t_id,))
-                        c.execute("DELETE FROM users WHERE phone=?", (t_p,))
-                        conn.commit()
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM teachers WHERE id=?", (t_id,))
+                            c.execute("DELETE FROM users WHERE phone=?", (t_p,))
+                            conn.commit()
                         st.success("تم الحذف بنجاح!")
                         st.rerun()
             else:
                 st.info("لا يوجد أساتذة مسجلون حالياً.")
 
         with dev_tab3:
-            c.execute("SELECT id, phone, email, name, role, is_blocked FROM users WHERE role != 'مطور'")
-            users = c.fetchall()
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, phone, email, name, role, is_blocked FROM users WHERE role != 'مطور'")
+                users = c.fetchall()
+            
             if users:
                 for u_id, u_phone, u_email, u_name, u_role, is_blocked in users:
                     ident = u_email if u_email else u_phone
                     st.write(f"👤 {u_name} ({u_role}) - {ident}")
                     if is_blocked == 1:
                         if st.button(f"فك حظر", key=f"unblock_{u_id}"):
-                            c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
-                            conn.commit()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
+                                conn.commit()
                             st.rerun()
                     else:
                         if st.button(f"حظر", key=f"block_{u_id}"):
-                            c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
-                            conn.commit()
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
+                                conn.commit()
                             st.rerun()
             else:
                 st.info("لا يوجد مستخدمون مسجلون.")
@@ -651,8 +673,6 @@ else:
                     update_setting("teacher_secret", new_secret_input.strip())
                     st.success("تم تحديث كود التسجيل السري بنجاح!")
                     st.rerun()
-
-    conn.close()
 
 st.write("---")
 st.caption("⚡ منصة نوفا التعليمية © 2026")
