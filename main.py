@@ -111,6 +111,18 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
         
+        # التأكد من وجود كافة الأعمدة في جدول users لعدم حدوث أخطاء
+        user_columns = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
+        if "age" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''")
+        if "grade" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN grade TEXT DEFAULT ''")
+        if "email" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''")
+        if "is_blocked" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
+
+        # التأكد من وجود كافة الأعمدة في جدول teachers
         existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
         if "grade_level" not in existing_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
@@ -148,7 +160,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
-# 3. إدارة الجلسات عبر الـ Query Params (تسجيل دائم ومستقر)
+# 3. إدارة الجلسات عبر الـ Query Params
 # ==========================================
 params = st.query_params
 
@@ -285,8 +297,8 @@ if not st.session_state.is_logged_in:
                                     login_user(s_phone, "طالب")
                                     st.success("تم حفظ الطالب في السيستم وتسجيل الدخول بنجاح!")
                                     st.rerun()
-                        except:
-                            st.error("حدث خطأ أثناء التسجيل، تأكد من صحة البيانات.")
+                        except Exception as e:
+                            st.error(f"🚫 حدث خطأ أثناء التسجيل: {e}")
                     else:
                         st.error("يرجى إدخال رقم المحمول وكلمة المرور على الأقل!")
         
@@ -316,8 +328,8 @@ if not st.session_state.is_logged_in:
                                     st.rerun()
                             else:
                                 st.error("🚫 رقم المحمول أو كلمة المرور غير صحيحة!")
-                        except:
-                            st.error("🚫 حدث خطأ أثناء تسجيل الدخول!")
+                        except Exception as e:
+                            st.error(f"🚫 حدث خطأ أثناء تسجيل الدخول: {e}")
                     else:
                         st.error("يرجى إدخال رقم المحمول وكلمة المرور!")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -357,8 +369,8 @@ if not st.session_state.is_logged_in:
                                     login_user(t_phone_reg, "أستاذ")
                                     st.success("تم حفظ الأستاذ في السيستم وتسجيل الدخول بنجاح!")
                                     st.rerun()
-                        except:
-                            st.error("حدث خطأ أثناء حفظ البيانات.")
+                        except Exception as e:
+                            st.error(f"حدث خطأ أثناء حفظ البيانات: {e}")
                     else:
                         st.error("أدخل اسم الأستاذ ورقم المحمول والكود السري!")
         
@@ -386,8 +398,8 @@ if not st.session_state.is_logged_in:
                                 st.rerun()
                             else:
                                 st.error("🚫 رقم المحمول غير مسجل كأستاذ في السيستم!")
-                        except:
-                            st.error("🚫 حدث خطأ أثناء تسجيل الدخول!")
+                        except Exception as e:
+                            st.error(f"🚫 حدث خطأ أثناء تسجيل الدخول: {e}")
                     else:
                         st.error("يرجى إدخال رقم المحمول والكود السري!")
         st.markdown("</div>", unsafe_allow_html=True)
