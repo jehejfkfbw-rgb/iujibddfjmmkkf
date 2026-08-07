@@ -111,7 +111,6 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)''')
     
-    # التأكد من وجود الأعمدة المطلوبة في جدول teachers حتى لو القاعدة قديمة
     existing_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
     if "grade_level" not in existing_columns:
         c.execute("ALTER TABLE teachers ADD COLUMN grade_level TEXT DEFAULT 'جميع المراحل'")
