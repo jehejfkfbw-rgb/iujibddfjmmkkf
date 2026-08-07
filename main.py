@@ -110,8 +110,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY, value TEXT)''')
     
-    # تم تحديث الكود السري الافتراضي هنا إلى 90100
-    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
+    # تحديث الكود السري ليكون 90100 دائماً وتحديث القديم إن وجد
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('teacher_secret', '90100')")
     
     conn.commit()
     conn.close()
