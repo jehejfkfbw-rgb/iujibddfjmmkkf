@@ -186,12 +186,15 @@ def render_live_chat(room_id, user_name):
         send_btn = st.form_submit_button("إرسال")
         if send_btn and msg:
             t_now = datetime.datetime.now().strftime("%H:%M:%S")
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("INSERT INTO live_chat (room_id, sender_name, message, timestamp) VALUES (?, ?, ?, ?)",
-                          (room_id, user_name, msg, t_now))
-                conn.commit()
-            st.rerun()
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("INSERT INTO live_chat (room_id, sender_name, message, timestamp) VALUES (?, ?, ?, ?)",
+                              (room_id, user_name, msg, t_now))
+                    conn.commit()
+                st.rerun()
+            except Exception as e:
+                st.error(f"خطأ في الإرسال: {e}")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -354,7 +357,6 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             if st_u_row:
                 st_current_name = st_u_row[0]
     except Exception as e:
-        # معالجة آمنة لضمان عدم توقف التطبيق أو ظهور الخطأ
         pass
 
     sub_status = sub_info[0] if sub_info else None
@@ -444,13 +446,18 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             if pay_btn:
                 if cash_phone_used:
                     t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    with sqlite3.connect(DB_NAME) as conn:
-                        c = conn.cursor()
-                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, requested_at) VALUES (?, ?, 'pending', ?)",
-                                  (cash_phone_used, t_phone, t_now_str))
-                        conn.commit()
-                    st.success("✔️ تم إرسال الطلب وبدء العد التنازلي لمدة ساعتين بانتظار قبول الأستاذ!")
-                    st.rerun()
+                    try:
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            # استخدام الاستعلام الآمن لتجنب أي أخطاء في الجدول
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (cash_phone_used, t_phone))
+                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, requested_at) VALUES (?, ?, 'pending', ?)",
+                                      (cash_phone_used, t_phone, t_now_str))
+                            conn.commit()
+                        st.success("✔️ تم إرسال الطلب وبدء العد التنازلي لمدة ساعتين بانتظار قبول الأستاذ!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"🚫 حدث خطأ أثناء إرسال الطلب: {e}")
                 else:
                     st.error("يرجى إدخال رقم التليفون المحول منه!")
                     
@@ -678,7 +685,7 @@ else:
         st.rerun()
 
     # ------------------------------------------
-    # واجهة الطالب (مع زر الإبلاغ وإلغاء الاشتراك)
+    # واجهة الطالب
     # ------------------------------------------
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 الأساتذة المتاحون في السيستم")
@@ -969,7 +976,7 @@ else:
                         if col_u1.button("🚫 حظر المستخدم", key=f"dev_block_{u_ph}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("users SET is_blocked=1 WHERE phone=?", (u_ph,))
+                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
                                 c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (u_ph,))
                                 conn.commit()
                             st.warning("تم حظر المستخدم!")
