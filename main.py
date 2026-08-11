@@ -102,7 +102,6 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
             grade_level TEXT, age INTEGER, price REAL, image_url TEXT, room_id TEXT, is_blocked INTEGER DEFAULT 0)''')
             
-        # جدول الأرقام المسموح لها بالتسجيل كأستاذ (يتحكم فيها المطور)
         c.execute('''CREATE TABLE IF NOT EXISTS allowed_teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE)''')
             
@@ -126,7 +125,6 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
             
-        # إضافة رقم أستاذ افتراضي للتجربة كمثال
         c.execute("INSERT OR IGNORE INTO allowed_teachers (phone) VALUES ('01000000000')")
         
         conn.commit()
@@ -168,7 +166,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. الشات التفاعلي للبث المباشر مع الحظر
+# 4. الشات والمحتوى والطلبات
 # ==========================================
 @st.fragment
 def render_live_chat(room_id, user_phone, user_name, user_role):
@@ -529,7 +527,6 @@ if not st.session_state.is_logged_in:
                 
                 if t_signup_btn:
                     if t_secret_code.strip() == "901000" and t_phone_reg:
-                        # التحقق هل الرقم مسجل مسبقاً في جدول الأستاذ المسموح لهم
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
@@ -539,7 +536,6 @@ if not st.session_state.is_logged_in:
                                 if not allowed_row:
                                     st.error("❌ هذا الرقم غير مسجل ومصرح له من قبل المطور! يرجى التواصل مع المطور لإضافة رقمك أولاً.")
                                 else:
-                                    # التحقق إذا كان الأستاذ مسجل بالفعل
                                     c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
                                     if c.fetchone():
                                         st.error("هذا الرقم مسجل بحساب أستاذ بالفعل!")
@@ -724,20 +720,126 @@ else:
             logout_user()
             st.rerun()
 
-        st.subheader("لوحة تحكم المطور 👑")
+        st.subheader("لوحة تحكم المطور الخارقة 👑")
         
-        # اختيار القسم العلوي للمطور بدقة واضحة
         dev_section = st.selectbox("اختر قسم التحكم:", [
-            "🛡️ إدارة الحظر (قائمة المستخدمين والأساتذة)", 
+            "👑 إدارة وتعديل الأساتذة بالكامل",
+            "🎓 إدارة وتعديل الطلاب بالكامل",
+            "🎬 إدارة محتوى ومنشورات الأساتذة",
+            "🛡️ إدارة الحظر والفك", 
             "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل",
-            "📢 قسم الشكاوى والبلاغات الواردة", 
+            "📢 قسم الشكاوى والبلاغات", 
             "📊 الإحصائيات وإدارة الشات"
         ])
         
         st.write("---")
 
-        if dev_section == "🛡️ إدارة الحظر (قائمة المستخدمين والأساتذة)":
-            st.subheader("👥 جميع المستخدمين غير المحظورين (اضغط حظر عند اللزوم)")
+        if dev_section == "👑 إدارة وتعديل الأساتذة بالكامل":
+            st.subheader("👨‍🏫 قائمة الأساتذة (تعديل البيانات أو الحذف)")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, phone, name, subject, price FROM teachers")
+                    all_teachers = c.fetchall()
+                
+                if all_teachers:
+                    for t_id, t_ph, t_n, t_s, t_p in all_teachers:
+                        with st.expander(f"👨‍🏫 {t_n} ({t_s}) - هاتف: {t_ph}"):
+                            with st.form(f"edit_teacher_{t_id}"):
+                                new_name = st.text_input("اسم الأستاذ:", value=t_n)
+                                new_sub = st.text_input("المادة:", value=t_s)
+                                new_price = st.number_input("سعر الاشتراك (جـ):", value=float(t_p))
+                                update_t_btn = st.form_submit_button("حفظ التعديلات")
+                                
+                                if update_t_btn:
+                                    with sqlite3.connect(DB_NAME) as conn:
+                                        c = conn.cursor()
+                                        c.execute("UPDATE teachers SET name=?, subject=?, price=? WHERE id=?", (new_name, new_sub, new_price, t_id))
+                                        c.execute("UPDATE users SET name=? WHERE phone=?", (new_name, t_ph))
+                                        conn.commit()
+                                    st.success("تم تحديث بيانات الأستاذ بنجاح!")
+                                    st.rerun()
+                            
+                            if st.button(f"🗑️ حذف الأستاذ نهائياً", key=f"del_teacher_{t_id}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM teachers WHERE id=?", (t_id,))
+                                    c.execute("DELETE FROM users WHERE phone=?", (t_ph,))
+                                    conn.commit()
+                                st.success("تم حذف الأستاذ بنجاح!")
+                                st.rerun()
+                else:
+                    st.info("لا يوجد أساتذة مسجلين.")
+            except:
+                pass
+
+        elif dev_section == "🎓 إدارة وتعديل الطلاب بالكامل":
+            st.subheader("🎓 قائمة الطلاب (تعديل البيانات أو الحذف)")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, phone, name, grade FROM users WHERE role='طالب'")
+                    all_students = c.fetchall()
+                
+                if all_students:
+                    for st_id, st_ph, st_n, st_g in all_students:
+                        with st.expander(f"🎓 {st_n or 'طالب'} - هاتف: {st_ph}"):
+                            with st.form(f"edit_student_{st_id}"):
+                                new_st_name = st.text_input("اسم الطالب:", value=st_n or "")
+                                new_st_grade = st.text_input("المرحلة الدراسية:", value=st_g or "")
+                                update_st_btn = st.form_submit_button("حفظ تعديلات الطالب")
+                                
+                                if update_st_btn:
+                                    with sqlite3.connect(DB_NAME) as conn:
+                                        c = conn.cursor()
+                                        c.execute("UPDATE users SET name=?, grade=? WHERE id=?", (new_st_name, new_st_grade, st_id))
+                                        conn.commit()
+                                    st.success("تم تحديث بيانات الطالب!")
+                                    st.rerun()
+                            
+                            if st.button(f"🗑️ حذف الطالب نهائياً", key=f"del_student_{st_id}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM users WHERE id=?", (st_id,))
+                                    conn.commit()
+                                st.success("تم حذف الطالب بنجاح!")
+                                st.rerun()
+                else:
+                    st.info("لا يوجد طلاب مسجلين.")
+            except:
+                pass
+
+        elif dev_section == "🎬 إدارة محتوى ومنشورات الأساتذة":
+            st.subheader("🎬 جميع فيديوهات ومنشورات الأساتذة")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, teacher_phone, title, media_type, file_path, views_count FROM posts")
+                    all_posts = c.fetchall()
+                
+                if all_posts:
+                    for p_id, p_tph, p_title, p_type, p_path, p_views in all_posts:
+                        st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | المشاهدات: {p_views}")
+                        if os.path.exists(p_path):
+                            if p_type == "image":
+                                st.image(p_path, width=200)
+                            else:
+                                st.video(p_path)
+                        if st.button(f"🗑️ حذف هذا المنشور/الفيديو", key=f"dev_del_post_{p_id}"):
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("DELETE FROM posts WHERE id=?", (p_id,))
+                                conn.commit()
+                            st.success("تم حذف المنشور بنجاح!")
+                            st.rerun()
+                        st.write("---")
+                else:
+                    st.info("لا توجد منشورات مرفوعة حالياً.")
+            except:
+                pass
+
+        elif dev_section == "🛡️ إدارة الحظر والفك":
+            st.subheader("👥 الحظر السريع للأساتذة والمستخدمين")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -747,7 +849,6 @@ else:
                     c.execute("SELECT phone, name, subject FROM teachers WHERE is_blocked=0")
                     active_teachers = c.fetchall()
                 
-                st.markdown("#### الطلاب والمستخدمون:")
                 if active_users:
                     for u_ph, u_name, u_role in active_users:
                         col_u1, col_u2 = st.columns([3, 1])
@@ -760,12 +861,9 @@ else:
                                     c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
                                     c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (u_ph,))
                                     conn.commit()
-                                st.success(f"تم حظر {u_name} نهائياً!")
+                                st.success("تم الحظر!")
                                 st.rerun()
-                else:
-                    st.info("لا يوجد طلاب أو مستخدمين متاحين حالياً.")
 
-                st.markdown("#### الأساتذة:")
                 if active_teachers:
                     for t_ph, t_name, t_sub in active_teachers:
                         col_t1, col_t2 = st.columns([3, 1])
@@ -778,17 +876,14 @@ else:
                                     c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (t_ph,))
                                     c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (t_ph,))
                                     conn.commit()
-                                st.success(f"تم حظر الأستاذ {t_name} نهائياً!")
+                                st.success("تم الحظر!")
                                 st.rerun()
-                else:
-                    st.info("لا يوجد أساتذة نشطين حالياً.")
             except:
                 pass
 
             st.write("---")
-            st.subheader("🔓 فك الحظر عن مستخدم محظور")
             with st.form("admin_unban_form"):
-                unban_phone_input = st.text_input("أدخل رقم هاتف المستخدم لفك الحظر عنه:")
+                unban_phone_input = st.text_input("فك الحظر عن رقم هاتف:")
                 unban_btn = st.form_submit_button("فك الحظر")
                 if unban_btn and unban_phone_input:
                     try:
@@ -797,27 +892,26 @@ else:
                             c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
                             c.execute("UPDATE teachers SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
                             conn.commit()
-                        st.success(f"تم فك الحظر عن الرقم {unban_phone_input} بنجاح!")
+                        st.success(f"تم فك الحظر عن {unban_phone_input}")
                     except:
-                        st.error("حدث خطأ أثناء فك الحظر.")
+                        pass
 
         elif dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
-            st.subheader("➕ إضافة رقم أستاذ جديد مسموح له بالتسجيل")
+            st.subheader("➕ إضافة رقم أستاذ مصرح له")
             with st.form("add_allowed_teacher_form"):
-                new_t_phone = st.text_input("أدخل رقم محمول الأستاذ المسموح له:")
-                add_t_btn = st.form_submit_button("إضافة للقائمة المسموحة")
+                new_t_phone = st.text_input("أدخل رقم محمول الأستاذ:")
+                add_t_btn = st.form_submit_button("إضافة للقائمة")
                 if add_t_btn and new_t_phone:
                     try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
                             c.execute("INSERT INTO allowed_teachers (phone) VALUES (?)", (new_t_phone,))
                             conn.commit()
-                        st.success(f"تمت إضافة الرقم {new_t_phone} بنجاح! يمكنه الآن إنشاء حسابه.")
+                        st.success("تمت الإضافة بنجاح!")
                     except:
-                        st.error("هذا الرقم موجود مسبقاً في القائمة أو حدث خطأ.")
+                        st.error("الرقم موجود مسبقاً.")
 
             st.write("---")
-            st.subheader("📋 قائمة الأساتذة المصرح لهم حالياً:")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -828,7 +922,7 @@ else:
                     for a_id, a_ph in allowed_list:
                         col_a1, col_a2 = st.columns([3, 1])
                         with col_a1:
-                            st.markdown(f"📞 هاتف الأستاذ المصرح: `{a_ph}`")
+                            st.markdown(f"📞 `{a_ph}`")
                         with col_a2:
                             if st.button("حذف", key=f"del_allowed_{a_id}"):
                                 with sqlite3.connect(DB_NAME) as conn:
@@ -836,13 +930,11 @@ else:
                                     c.execute("DELETE FROM allowed_teachers WHERE id=?", (a_id,))
                                     conn.commit()
                                 st.rerun()
-                else:
-                    st.info("لا توجد أرقام مسجلة حالياً.")
             except:
                 pass
 
-        elif dev_section == "📢 قسم الشكاوى والبلاغات الواردة":
-            st.subheader("🚨 الشكاوى والبلاغات")
+        elif dev_section == "📢 قسم الشكاوى والبلاغات":
+            st.subheader("🚨 الشكاوى الواردة")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -855,7 +947,6 @@ else:
                         <div class='app-card'>
                             <b>👤 الاسم:</b> {c_name} ({c_role})<br>
                             <b>📞 الهاتف:</b> {c_ph}<br>
-                            <b>⏰ الوقت:</b> {c_time}<br>
                             <b>📝 الشكوى:</b> {c_text}
                         </div>
                         """, unsafe_allow_html=True)
@@ -866,21 +957,21 @@ else:
                                 conn.commit()
                             st.rerun()
                 else:
-                    st.info("لا توجد شكاوى أو بلاغات حالياً.")
+                    st.info("لا توجد شكاوى.")
             except:
                 pass
 
         elif dev_section == "📊 الإحصائيات وإدارة الشات":
-            if st.button("🗑️ مسح وتفريغ جميع رسائل شات البث المباشر بالكامل"):
+            if st.button("🗑️ تفريغ جميع رسائل شات البث بالكامل"):
                 try:
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
                         c.execute("DELETE FROM live_chat")
                         conn.commit()
-                    st.success("تم مسح شات البث بالكامل بنجاح!")
+                    st.success("تم مسح الشات بنجاح!")
                     st.rerun()
                 except:
-                    st.error("حدث خطأ أثناء مسح الشات.")
+                    pass
 
             st.write("---")
             try:
@@ -890,7 +981,10 @@ else:
                     u_cnt = c.fetchone()[0]
                     c.execute("SELECT COUNT(*) FROM teachers")
                     t_cnt = c.fetchone()[0]
-                st.metric("عدد المستخدمين", u_cnt)
-                st.metric("عدد الأساتذة", t_cnt)
+                    c.execute("SELECT COUNT(*) FROM posts")
+                    p_cnt = c.fetchone()[0]
+                st.metric("إجمالي المستخدمين والطلاب", u_cnt)
+                st.metric("إجمالي الأساتذة", t_cnt)
+                st.metric("إجمالي الفيديوهات والمنشورات", p_cnt)
             except:
                 pass
