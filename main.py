@@ -103,7 +103,7 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'pending', UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
@@ -139,6 +139,10 @@ def init_db():
         if "room_id" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN room_id TEXT DEFAULT ''")
 
+        sub_columns = [col[1] for col in c.execute("PRAGMA table_info(subscriptions)").fetchall()]
+        if "expires_at" not in sub_columns:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN expires_at TEXT DEFAULT ''")
+
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('teacher_secret', '901000')")
         conn.commit()
 
@@ -164,7 +168,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
-# 3. إدارة الجلسات عبر الـ Query Params
+# 3. إدارة الجلسات عبر الـ Query Params (تثبيت الدخول)
 # ==========================================
 params = st.query_params
 
@@ -195,11 +199,11 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. التحديثات التلقائية للمحتوى
+# 4. التحديثات التلقائية للمحتوى والطلبات
 # ==========================================
 @st.fragment
 def display_student_media(teacher_phone):
-    st_autorefresh(interval=5000, key=f"refresh_media_{teacher_phone}")
+    st_autorefresh(interval=3000, key=f"refresh_media_{teacher_phone}")
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
@@ -222,15 +226,16 @@ def display_student_media(teacher_phone):
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
-    st_autorefresh(interval=5000, key=f"refresh_subs_{teacher_phone}")
+    st_autorefresh(interval=3000, key=f"refresh_subs_{teacher_phone}")
+    import datetime
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT student_phone, status FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT student_phone, status, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
-                for s_ph, status in subs:
+                for s_ph, status, expires_at in subs:
                     c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
@@ -240,21 +245,35 @@ def display_teacher_requests(teacher_phone):
                     st.markdown(f"🎓 **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade}")
                     st.markdown(f"📱 الهاتف: `{s_ph}` | الحالة: **{status}**")
                     
+                    if expires_at:
+                        st.markdown(f"⏱️ تنتهي المهلة/الاشتراك في: `{expires_at}`")
+
+                    col_a, col_b, col_c = st.columns(3)
                     if status == 'pending':
-                        col_a, col_b = st.columns(2)
                         if col_a.button("✅ قبول", key=f"acc_{s_ph}"):
                             c.execute("UPDATE subscriptions SET status='active' WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                             conn.commit()
                             st.rerun()
-                        if col_b.button("❌ رفض", key=f"ref_{s_ph}"):
-                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                    
+                    if status == 'active':
+                        if col_b.button("⏳ مهلة سريعة", key=f"timeout_{s_ph}"):
+                            # تعيين مهلة لمدة ساعة مثلاً من الآن
+                            expire_time = (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("UPDATE subscriptions SET expires_at=? WHERE student_phone=? AND teacher_phone=?", (expire_time, s_ph, teacher_phone))
                             conn.commit()
+                            st.success("تم منح المهلة!")
                             st.rerun()
+
+                    if col_c.button("❌ إلغاء الاشتراك", key=f"ref_{s_ph}"):
+                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                        conn.commit()
+                        st.warning("تم إلغاء اشتراك الطالب.")
+                        st.rerun()
                     st.write("---")
             else:
                 st.info("لا توجد طلبات اشتراك حالياً.")
-    except:
-        st.info("جارٍ تحديث الطلبات...")
+    except Exception as e:
+        st.info(f"جارٍ تحديث الطلبات... ({e})")
 
 # ==========================================
 # 5. واجهة التطبيق الرئيسية
@@ -366,7 +385,7 @@ if not st.session_state.is_logged_in:
                                 else:
                                     hashed_t_pass = hash_password(t_secret_code)
                                     c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
                                               (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
                                     c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
                                     conn.commit()
@@ -493,13 +512,27 @@ else:
                 
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                    c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                               (st.session_state.user_phone, t_phone))
-                    sub_status = c.fetchone()
+                    sub_info = c.fetchone()
 
-                if sub_status and sub_status[0] == 'active':
-                    st.success("✅ مشترك - يمكنك المشاهدة")
-                    tab_live, tab_media = st.tabs(["🔴 البث", "🎬 الفيديوهات"])
+                sub_status = sub_info[0] if sub_info else None
+                expires_at = sub_info[1] if sub_info else None
+
+                # التحقق من انتهاء المهلة الزمنية إن وجدت
+                import datetime
+                is_expired = False
+                if expires_at:
+                    try:
+                        exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+                        if datetime.datetime.now() > exp_dt:
+                            is_expired = True
+                    except:
+                        pass
+
+                if sub_status == 'active' and not is_expired:
+                    st.success("✅ مشترك - يمكنك المشاهدة والبث المباشر بكل سهولة على هاتفك")
+                    tab_live, tab_media = st.tabs(["🔴 البث المباشر", "🎬 الفيديوهات"])
                     with tab_live:
                         stream_html = f"""
                         <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
@@ -511,9 +544,11 @@ else:
                     with tab_media:
                         display_student_media(t_phone)
                         
-                elif sub_status and sub_status[0] == 'pending':
-                    st.warning("⏳ طلبك قيد المراجعة.")
+                elif sub_status == 'pending':
+                    st.warning("⏳ طلبك قيد المراجعة لدى الأستاذ.")
                 else:
+                    if is_expired:
+                        st.error("⏳ انتهت مهلتك المؤقتة مع هذا الأستاذ، يرجى تجديد الاشتراك.")
                     st.markdown(f"""
                     <div class="cash-box">
                         حول ({t_price} جـ) فودافون كاش على: <b>01213783090</b>
@@ -522,7 +557,7 @@ else:
                     if st.button(f"🚀 طلب الاشتراك", key=f"btn_{t_phone}"):
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
-                            c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
+                            c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, expires_at) VALUES (?, ?, 'pending', '')",
                                       (st.session_state.user_phone, t_phone))
                             conn.commit()
                         st.success("تم إرسال الطلب!")
@@ -542,9 +577,10 @@ else:
             t_info = c.fetchone()
         room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
 
-        tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث", "📤 نشر", "👥 الطلبات", "⚙️ الإعدادات"])
+        tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 إدارة الطلاب", "⚙️ الإعدادات"])
 
         with tab_stream:
+            st.info("شغل الكاميرا والبث المباشر من هاتفك أو جهازك مباشرة:")
             t_stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&webcam=1&autostart=1" 
                     style="width: 100%; height: 380px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
@@ -554,7 +590,7 @@ else:
             components.html(t_stream_html, height=400)
 
         with tab_post:
-            p_title = st.text_input("عنوان الفيديو:")
+            p_title = st.text_input("عنوان الفيديو أو المحتوى:")
             up_file = st.file_uploader("اختر فيديو أو صورة:", type=["png", "jpg", "jpeg", "mp4"])
             if st.button("🚀 رفع المحتوى"):
                 if up_file and p_title:
@@ -571,7 +607,7 @@ else:
                     st.rerun()
 
         with tab_subs:
-            st.write("📋 **الطلاب:**")
+            st.write("📋 **طلبات واشتراكات الطلاب (مع إمكانية إلغاء الاشتراك أو عمل مهلة):**")
             display_teacher_requests(st.session_state.user_phone)
 
         with tab_prof:
@@ -593,7 +629,7 @@ else:
     # ------------------------------------------
     elif st.session_state.user_role == "مطور":
         st.subheader("👑 لوحة تحكم المطور الشاملة")
-        dev_tab1, dev_tab2, dev_tab3, dev_tab4 = st.tabs(["🎥 مراجعة المحتوى", "👨‍🏫 إدارة الأساتذة", "🚫 المستخدمين", "⚙️ الإعدادات العامة"])
+        dev_tab1, dev_tab2 = st.tabs(["🎥 مراجعة المحتوى المنشور", "👨‍🏫 إضافة وإدارة الأساتذة"])
         
         with dev_tab1:
             with sqlite3.connect(DB_NAME) as conn:
@@ -644,7 +680,7 @@ else:
                             else:
                                 hashed_tp = hash_password("901000")
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                           (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                                 conn.commit()
@@ -652,45 +688,3 @@ else:
                                 st.rerun()
                     else:
                         st.error("يرجى ملء الحقول المطلوبة.")
-
-        with dev_tab3:
-            st.write("🚫 **إدارة حظر المستخدمين:**")
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT phone, name, role, is_blocked FROM users")
-                all_users = c.fetchall()
-
-            if all_users:
-                for u_ph, u_name, u_role, u_blocked in all_users:
-                    st.markdown(f"👤 **{u_name if u_name else 'بدون اسم'}** | الهاتف: `{u_ph}` | الدور: {u_role} | محظور: **{'نعم' if u_blocked == 1 else 'لا'}**")
-                    col_b1, col_b2 = st.columns(2)
-                    if u_blocked == 0:
-                        if col_b1.button("🔒 حظر", key=f"block_{u_ph}"):
-                            with sqlite3.connect(DB_NAME) as conn:
-                                c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
-                                conn.commit()
-                            st.rerun()
-                    else:
-                        if col_b2.button("🔓 إلغاء الحظر", key=f"unblock_{u_ph}"):
-                            with sqlite3.connect(DB_NAME) as conn:
-                                c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (u_ph,))
-                                conn.commit()
-                            st.rerun()
-                    st.write("---")
-            else:
-                st.info("لا يوجد مستخدمون مسجلون.")
-
-        with dev_tab4:
-            with st.form("dev_settings_form"):
-                st.write("⚙️ **تغيير كود انضمام الأساتذة السري:**")
-                current_secret = get_setting("teacher_secret", "901000")
-                new_secret_input = st.text_input("الكود السري الجديد:", value=current_secret)
-                if st.form_submit_button("تحديث الكود السري"):
-                    if new_secret_input.strip():
-                        update_setting("teacher_secret", new_secret_input.strip())
-                        st.success("✔️ تم تحديث الكود السري للأساتذة بنجاح!")
-                        st.rerun()
-                    else:
-                        st.error("الكود لا يمكن أن يكون فارغاً.")
