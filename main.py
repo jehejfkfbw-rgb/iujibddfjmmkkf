@@ -112,11 +112,9 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
             
-        # جدول استعادة كلمة المرور المحفوظ في السيستم
         c.execute('''CREATE TABLE IF NOT EXISTS password_resets (
             phone TEXT PRIMARY KEY, code TEXT)''')
         
-        # التأكد من وجود كافة الأعمدة في جدول users
         user_columns = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
         if "age" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN age TEXT DEFAULT ''")
@@ -127,7 +125,6 @@ def init_db():
         if "is_blocked" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
 
-        # التأكد من وجود كافة الأعمدة في جدول teachers
         teacher_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
         if "password" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN password TEXT DEFAULT ''")
@@ -369,7 +366,7 @@ if not st.session_state.is_logged_in:
                                 else:
                                     hashed_t_pass = hash_password(t_secret_code)
                                     c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
+                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
                                               (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg if t_sub_reg else "غير محدد", 'جميع المراحل', 30, 100.0, '', f"room_{t_phone_reg}"))
                                     c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
                                     conn.commit()
@@ -647,68 +644,53 @@ else:
                             else:
                                 hashed_tp = hash_password("901000")
                                 c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id) 
-                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                           (new_t_phone, hashed_tp, new_t_name, new_t_sub, 'جميع المراحل', 30, new_t_price, '', f"room_{new_t_phone}"))
                                 c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (new_t_phone, new_t_name))
                                 conn.commit()
-                                st.success("تم حفظ الأستاذ في السيستم بنجاح!")
+                                st.success("✔️ تم إضافة الأستاذ بنجاح للسيستم!")
                                 st.rerun()
                     else:
-                        st.error("يرجى إكمال اسم الأستاذ ورقم المحمول.")
-
-            st.write("---")
-            st.write("📋 **الأساتذة المحفوظون في السيستم:**")
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT id, name, phone, subject, price FROM teachers")
-                all_teachers = c.fetchall()
-            
-            if all_teachers:
-                for t_id, t_n, t_p, t_s, t_pr in all_teachers:
-                    st.write(f"👨‍🏫 **{t_n}** | المادة: {t_s} | المحمول: `{t_p}` | السعر: {t_pr} جـ")
-                    if st.button(f"🗑️ حذف الأستاذ {t_n}", key=f"del_t_{t_id}"):
-                        with sqlite3.connect(DB_NAME) as conn:
-                            c = conn.cursor()
-                            c.execute("DELETE FROM teachers WHERE id=?", (t_id,))
-                            c.execute("DELETE FROM users WHERE phone=?", (t_p,))
-                            conn.commit()
-                        st.success("تم الحذف بنجاح!")
-                        st.rerun()
-            else:
-                st.info("لا يوجد أساتذة مسجلون حالياً.")
+                        st.error("يرجى ملء الحقول المطلوبة.")
 
         with dev_tab3:
+            st.write("🚫 **إدارة حظر المستخدمين:**")
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
-                c.execute("SELECT id, phone, email, name, role, is_blocked FROM users WHERE role != 'مطور'")
-                users = c.fetchall()
-            
-            if users:
-                for u_id, u_phone, u_email, u_name, u_role, is_blocked in users:
-                    ident = u_phone if u_phone else u_email
-                    st.write(f"👤 {u_name} ({u_role}) - المحمول: `{ident}`")
-                    if is_blocked == 1:
-                        if st.button(f"فك حظر", key=f"unblock_{u_id}"):
+                c.execute("SELECT phone, name, role, is_blocked FROM users")
+                all_users = c.fetchall()
+
+            if all_users:
+                for u_ph, u_name, u_role, u_blocked in all_users:
+                    st.markdown(f"👤 **{u_name if u_name else 'بدون اسم'}** | الهاتف: `{u_ph}` | الدور: {u_role} | محظور: **{'نعم' if u_blocked == 1 else 'لا'}**")
+                    col_b1, col_b2 = st.columns(2)
+                    if u_blocked == 0:
+                        if col_b1.button("🔒 حظر", key=f"block_{u_ph}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=0 WHERE id=?", (u_id,))
+                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
                                 conn.commit()
                             st.rerun()
                     else:
-                        if st.button(f"حظر", key=f"block_{u_id}"):
+                        if col_b2.button("🔓 إلغاء الحظر", key=f"unblock_{u_ph}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=1 WHERE id=?", (u_id,))
+                                c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (u_ph,))
                                 conn.commit()
                             st.rerun()
+                    st.write("---")
             else:
-                st.info("لا يوجد مستخدمون مسجلون في السيستم.")
+                st.info("لا يوجد مستخدمون مسجلون.")
 
         with dev_tab4:
-            st.write("⚙️ **إعدادات المنصة:**")
-            current_secret = get_setting("teacher_secret", "901000")
-            new_sec = st.text_input("تعديل الكود السري للأساتذة:", value=current_secret)
-            if st.button("حفظ الكود السري"):
-                update_setting("teacher_secret", new_sec)
-                st.success("تم تحديث الكود السري بنجاح!")
-                st.rerun()
+            with st.form("dev_settings_form"):
+                st.write("⚙️ **تغيير كود انضمام الأساتذة السري:**")
+                current_secret = get_setting("teacher_secret", "901000")
+                new_secret_input = st.text_input("الكود السري الجديد:", value=current_secret)
+                if st.form_submit_button("تحديث الكود السري"):
+                    if new_secret_input.strip():
+                        update_setting("teacher_secret", new_secret_input.strip())
+                        st.success("✔️ تم تحديث الكود السري للأساتذة بنجاح!")
+                        st.rerun()
+                    else:
+                        st.error("الكود لا يمكن أن يكون فارغاً.")
