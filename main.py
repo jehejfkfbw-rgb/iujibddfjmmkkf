@@ -107,7 +107,7 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
-            media_type TEXT, file_path TEXT, status TEXT DEFAULT 'pending')''')
+            media_type TEXT, file_path TEXT, status TEXT DEFAULT 'approved')''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
@@ -157,12 +157,6 @@ def get_setting(key, default=""):
             return row[0] if row else default
     except:
         return default
-
-def update_setting(key, value):
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
-        conn.commit()
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -257,7 +251,6 @@ def display_teacher_requests(teacher_phone):
                     
                     if status == 'active':
                         if col_b.button("⏳ مهلة سريعة", key=f"timeout_{s_ph}"):
-                            # تعيين مهلة لمدة ساعة مثلاً من الآن
                             expire_time = (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
                             c.execute("UPDATE subscriptions SET expires_at=? WHERE student_phone=? AND teacher_phone=?", (expire_time, s_ph, teacher_phone))
                             conn.commit()
@@ -267,7 +260,7 @@ def display_teacher_requests(teacher_phone):
                     if col_c.button("❌ إلغاء الاشتراك", key=f"ref_{s_ph}"):
                         c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                         conn.commit()
-                        st.warning("تم إلغاء اشتراك الطالب.")
+                        st.warning("تم إلغاء اشتراك الطالب وإزالة الصلاحيات فوراً.")
                         st.rerun()
                     st.write("---")
             else:
@@ -519,7 +512,6 @@ else:
                 sub_status = sub_info[0] if sub_info else None
                 expires_at = sub_info[1] if sub_info else None
 
-                # التحقق من انتهاء المهلة الزمنية إن وجدت
                 import datetime
                 is_expired = False
                 if expires_at:
@@ -547,8 +539,11 @@ else:
                 elif sub_status == 'pending':
                     st.warning("⏳ طلبك قيد المراجعة لدى الأستاذ.")
                 else:
-                    if is_expired:
+                    if sub_info is None:
+                        st.info("⚠️ تم إلغاء الاشتراك مع هذا المدرس أو لم تقم بالاشتراك بعد. تم إخفاء الفيديوهات والبث المباشر تلقائياً، وستظهر فور الموافقة على اشتراكك الجديد.")
+                    elif is_expired:
                         st.error("⏳ انتهت مهلتك المؤقتة مع هذا الأستاذ، يرجى تجديد الاشتراك.")
+                        
                     st.markdown(f"""
                     <div class="cash-box">
                         حول ({t_price} جـ) فودافون كاش على: <b>01213783090</b>
@@ -577,7 +572,7 @@ else:
             t_info = c.fetchone()
         room_id = t_info[6] if t_info else f"room_{st.session_state.user_phone}"
 
-        tab_stream, tab_post, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "👥 إدارة الطلاب", "⚙️ الإعدادات"])
+        tab_stream, tab_post, tab_manage_posts, tab_subs, tab_prof = st.tabs(["🔴 البث المباشر", "📤 نشر محتوى", "🗑️ إدارة ومسح الفيديوهات", "👥 إدارة الطلاب", "⚙️ الإعدادات"])
 
         with tab_stream:
             st.info("شغل الكاميرا والبث المباشر من هاتفك أو جهازك مباشرة:")
@@ -600,14 +595,46 @@ else:
                     f_type = "video" if up_file.type.startswith("video") else "image"
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
-                        c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'pending')",
+                        c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                   (st.session_state.user_phone, p_title, f_type, file_path))
                         conn.commit()
-                    st.success("✔️ تم الرفع للمراجعة!")
+                    st.success("✔️ تم رفع ونشر المحتوى بنجاح!")
                     st.rerun()
 
+        with tab_manage_posts:
+            st.write("🗑️ **قائمة فيديوهاتك ومنشوراتك (يمكنك مسح أي فيديو نهائياً ولن يظهر للطلاب بعد الآن):**")
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, title, media_type, file_path FROM posts WHERE teacher_phone=?", (st.session_state.user_phone,))
+                my_posts = c.fetchall()
+
+            if my_posts:
+                for mp_id, mp_title, mp_type, mp_path in my_posts:
+                    st.markdown(f"📌 **العنوان:** {mp_title}")
+                    if os.path.exists(mp_path):
+                        if mp_type == "image":
+                            st.image(mp_path, width=200)
+                        elif mp_type == "video":
+                            st.video(mp_path)
+                    
+                    if st.button(f"🗑️ مسح هذا الفيديو نهائياً", key=f"del_post_{mp_id}"):
+                        try:
+                            if os.path.exists(mp_path):
+                                os.remove(mp_path)
+                        except:
+                            pass
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM posts WHERE id=?", (mp_id,))
+                            conn.commit()
+                        st.success("تم مسح الفيديو بنجاح ولم يعد يظهر لأي طالب!")
+                        st.rerun()
+                    st.write("---")
+            else:
+                st.info("لا توجد فيديوهات أو منشورات مرفوعة حالياً.")
+
         with tab_subs:
-            st.write("📋 **طلبات واشتراكات الطلاب (مع إمكانية إلغاء الاشتراك أو عمل مهلة):**")
+            st.write("📋 **طلبات واشتراكات الطلاب (إلغاء الاشتراك يزيل البث والفيديوهات من عند الطالب فوراً):**")
             display_teacher_requests(st.session_state.user_phone)
 
         with tab_prof:
