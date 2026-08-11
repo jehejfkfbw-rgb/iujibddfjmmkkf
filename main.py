@@ -193,11 +193,11 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. التحديثات التلقائية للمحتوى والطلبات
+# 4. التحديثات التلقائية الفورية (كل ثانية لتحديث حالة الاشتراك فوراً)
 # ==========================================
 @st.fragment
 def display_student_media(teacher_phone):
-    st_autorefresh(interval=3000, key=f"refresh_media_{teacher_phone}")
+    st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}")
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
@@ -220,7 +220,7 @@ def display_student_media(teacher_phone):
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
-    st_autorefresh(interval=3000, key=f"refresh_subs_{teacher_phone}")
+    st_autorefresh(interval=2000, key=f"refresh_subs_{teacher_phone}")
     import datetime
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -267,6 +267,71 @@ def display_teacher_requests(teacher_phone):
                 st.info("لا توجد طلبات اشتراك حالياً.")
     except Exception as e:
         st.info(f"جارٍ تحديث الطلبات... ({e})")
+
+# دالة مخصصة لتحديث كارد الأستاذ عند الطالب كل ثانية لفتح المنصة فور الموافقة
+@st.fragment
+def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, student_phone):
+    st_autorefresh(interval=2000, key=f"student_card_refresh_{t_phone}")
+    
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
+    st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
+    
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                  (student_phone, t_phone))
+        sub_info = c.fetchone()
+
+    sub_status = sub_info[0] if sub_info else None
+    expires_at = sub_info[1] if sub_info else None
+
+    import datetime
+    is_expired = False
+    if expires_at:
+        try:
+            exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+            if datetime.datetime.now() > exp_dt:
+                is_expired = True
+        except:
+            pass
+
+    if sub_status == 'active' and not is_expired:
+        st.success("✅ مشترك - تم قبول اشتراكك! يمكنك المشاهدة والبث المباشر الآن بكل سهولة")
+        tab_live, tab_media = st.tabs(["🔴 البث المباشر", "🎬 الفيديوهات"])
+        with tab_live:
+            stream_html = f"""
+            <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
+                    style="width: 100%; height: 350px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
+                    allow="camera; microphone; autoplay" allowfullscreen>
+            </iframe>
+            """
+            components.html(stream_html, height=370)
+        with tab_media:
+            display_student_media(t_phone)
+            
+    elif sub_status == 'pending':
+        st.warning("⏳ طلبك قيد المراجعة لدى الأستاذ... (سيتم فتح المنصة تلقائياً فور القبول في نفس اللحظة)")
+    else:
+        if sub_info is None:
+            st.info("⚠️ تم إلغاء الاشتراك مع هذا المدرس أو لم تقم بالاشتراك بعد.")
+        elif is_expired:
+            st.error("⏳ انتهت مهلتك المؤقتة مع هذا الأستاذ، يرجى تجديد الاشتراك.")
+            
+        st.markdown(f"""
+        <div class="cash-box">
+            حول ({t_price} جـ) فودافون كاش على: <b>01213783090</b>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button(f"🚀 طلب الاشتراك", key=f"btn_{t_phone}"):
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, expires_at) VALUES (?, ?, 'pending', '')",
+                          (student_phone, t_phone))
+                conn.commit()
+            st.success("تم إرسال الطلب!")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
 # 5. واجهة التطبيق الرئيسية
@@ -499,65 +564,8 @@ else:
         if teachers:
             for t in teachers:
                 t_name, t_sub, t_grade, t_age, t_price, t_img, room_id, t_phone = t
-                st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
-                st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
-                
-                with sqlite3.connect(DB_NAME) as conn:
-                    c = conn.cursor()
-                    c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                              (st.session_state.user_phone, t_phone))
-                    sub_info = c.fetchone()
-
-                sub_status = sub_info[0] if sub_info else None
-                expires_at = sub_info[1] if sub_info else None
-
-                import datetime
-                is_expired = False
-                if expires_at:
-                    try:
-                        exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
-                        if datetime.datetime.now() > exp_dt:
-                            is_expired = True
-                    except:
-                        pass
-
-                if sub_status == 'active' and not is_expired:
-                    st.success("✅ مشترك - يمكنك المشاهدة والبث المباشر بكل سهولة على هاتفك")
-                    tab_live, tab_media = st.tabs(["🔴 البث المباشر", "🎬 الفيديوهات"])
-                    with tab_live:
-                        stream_html = f"""
-                        <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
-                                style="width: 100%; height: 350px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
-                                allow="camera; microphone; autoplay" allowfullscreen>
-                        </iframe>
-                        """
-                        components.html(stream_html, height=370)
-                    with tab_media:
-                        display_student_media(t_phone)
-                        
-                elif sub_status == 'pending':
-                    st.warning("⏳ طلبك قيد المراجعة لدى الأستاذ.")
-                else:
-                    if sub_info is None:
-                        st.info("⚠️ تم إلغاء الاشتراك مع هذا المدرس أو لم تقم بالاشتراك بعد. تم إخفاء الفيديوهات والبث المباشر تلقائياً، وستظهر فور الموافقة على اشتراكك الجديد.")
-                    elif is_expired:
-                        st.error("⏳ انتهت مهلتك المؤقتة مع هذا الأستاذ، يرجى تجديد الاشتراك.")
-                        
-                    st.markdown(f"""
-                    <div class="cash-box">
-                        حول ({t_price} جـ) فودافون كاش على: <b>01213783090</b>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    if st.button(f"🚀 طلب الاشتراك", key=f"btn_{t_phone}"):
-                        with sqlite3.connect(DB_NAME) as conn:
-                            c = conn.cursor()
-                            c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, expires_at) VALUES (?, ?, 'pending', '')",
-                                      (st.session_state.user_phone, t_phone))
-                            conn.commit()
-                        st.success("تم إرسال الطلب!")
-                        st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                # استدعاء الدالة المحدثة التي تتحدث تلقائياً كل ثانية لتجاوز الانتظار فوراً عند القبول
+                render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, st.session_state.user_phone)
         else:
             st.info("لا يوجد أساتذة مسجلون حالياً في السيستم.")
 
