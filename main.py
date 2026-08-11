@@ -3,6 +3,7 @@ import sqlite3
 import os
 import streamlit.components.v1 as components
 import hashlib
+import random
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
@@ -110,6 +111,10 @@ def init_db():
 
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
+            
+        # جدول استعادة كلمة المرور المحفوظ في السيستم
+        c.execute('''CREATE TABLE IF NOT EXISTS password_resets (
+            phone TEXT PRIMARY KEY, code TEXT)''')
         
         # التأكد من وجود كافة الأعمدة في جدول users
         user_columns = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
@@ -122,7 +127,7 @@ def init_db():
         if "is_blocked" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
 
-        # التأكد من وجود كافة الأعمدة في جدول teachers بما فيها password
+        # التأكد من وجود كافة الأعمدة في جدول teachers
         teacher_columns = [col[1] for col in c.execute("PRAGMA table_info(teachers)").fetchall()]
         if "password" not in teacher_columns:
             c.execute("ALTER TABLE teachers ADD COLUMN password TEXT DEFAULT ''")
@@ -262,7 +267,7 @@ st.write("---")
 
 if not st.session_state.is_logged_in:
     st.markdown("<div class='app-card'>", unsafe_allow_html=True)
-    role_choice = st.radio("حدد نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
+    role_choice = st.radio("حدد نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑", "نسيت كلمة السر 🔑"], horizontal=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
     st.write("")
@@ -380,18 +385,17 @@ if not st.session_state.is_logged_in:
             with st.form("teacher_login"):
                 st.subheader("تسجيل دخول الأستاذ")
                 t_phone_in = st.text_input("رقم المحمول:")
-                t_secret_in = st.text_input("الكود السري:", type="password")
+                t_secret_in = st.text_input("كلمة المرور أو الكود السري:", type="password")
                 t_login_btn = st.form_submit_button("دخول الأستاذ")
                 
                 if t_login_btn:
                     correct_teacher_code = get_setting("teacher_secret", "901000")
-                    if t_secret_in.strip() != correct_teacher_code:
-                        st.error("🚫 الكود السري غير صحيح!")
-                    elif t_phone_in:
+                    if t_phone_in:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("SELECT phone FROM teachers WHERE phone=?", (t_phone_in,))
+                                hashed_t_pass = hash_password(t_secret_in)
+                                c.execute("SELECT phone FROM teachers WHERE phone=? AND (password=? OR ?=?)", (t_phone_in, hashed_t_pass, t_secret_in, correct_teacher_code))
                                 t_row = c.fetchone()
                             
                             if t_row:
@@ -399,11 +403,11 @@ if not st.session_state.is_logged_in:
                                 st.success("تم الدخول بنجاح!")
                                 st.rerun()
                             else:
-                                st.error("🚫 رقم المحمول غير مسجل كأستاذ في السيستم!")
+                                st.error("🚫 رقم المحمول أو كلمة المرور غير صحيحة!")
                         except Exception as e:
                             st.error(f"🚫 حدث خطأ أثناء تسجيل الدخول: {e}")
                     else:
-                        st.error("يرجى إدخال رقم المحمول والكود السري!")
+                        st.error("يرجى إدخال رقم المحمول وكلمة المرور!")
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif role_choice == "مطور 👑":
@@ -421,6 +425,49 @@ if not st.session_state.is_logged_in:
                     st.rerun()
                 else:
                     st.error("🚫 كود المطور غير صحيح!")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    elif role_choice == "نسيت كلمة السر 🔑":
+        st.markdown("<div class='app-card'>", unsafe_allow_html=True)
+        st.subheader("استعادة كلمة المرور عبر السيستم")
+        
+        reset_step = st.radio("الخطوة:", ["1. إرسال كود التأكيد", "2. تعيين كلمة سر جديدة"], horizontal=True)
+        reset_phone = st.text_input("أدخل رقم المحمول المسجل:")
+        
+        if reset_step == "1. إرسال كود التأكيد":
+            if st.button("إرسال الرمز"):
+                if reset_phone:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("SELECT phone FROM users WHERE phone=?", (reset_phone,))
+                        if c.fetchone():
+                            gen_code = str(random.randint(1000, 9999))
+                            c.execute("INSERT OR REPLACE INTO password_resets (phone, code) VALUES (?, ?)", (reset_phone, gen_code))
+                            conn.commit()
+                            st.info(f"تم حفظ كود التأكيد في السيستم بنجاح. الكود الخاص بك هو: **{gen_code}**")
+                        else:
+                            st.error("🚫 رقم المحمول غير مسجل في قاعدة البيانات!")
+                else:
+                    st.error("يرجى إدخال رقم المحمول أولاً.")
+        else:
+            code_input = st.text_input("أدخل كود التأكيد المولد:")
+            new_password_input = st.text_input("كلمة السر الجديدة:", type="password")
+            if st.button("تحديث كلمة السر"):
+                if reset_phone and code_input and new_password_input:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("SELECT code FROM password_resets WHERE phone=?", (reset_phone,))
+                        row_res = c.fetchone()
+                        if row_res and row_res[0] == code_input:
+                            hashed_new_pass = hash_password(new_password_input)
+                            c.execute("UPDATE users SET password=? WHERE phone=?", (hashed_new_pass, reset_phone))
+                            c.execute("DELETE FROM password_resets WHERE phone=?", (reset_phone,))
+                            conn.commit()
+                            st.success("✔️ تم تغيير كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول.")
+                        else:
+                            st.error("🚫 كود التأكيد غير صحيح!")
+                else:
+                    st.error("يرجى ملء جميع الحقول المطلوبة.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 else:
@@ -660,13 +707,8 @@ else:
         with dev_tab4:
             st.write("⚙️ **إعدادات المنصة:**")
             current_secret = get_setting("teacher_secret", "901000")
-            with st.form("settings_form"):
-                new_secret_input = st.text_input("كود تسجيل الأساتذة السري الحالي:", value=current_secret, type="password")
-                save_settings_btn = st.form_submit_button("حفظ التغييرات")
-                if save_settings_btn:
-                    update_setting("teacher_secret", new_secret_input.strip())
-                    st.success("تم تحديث الكود السري بنجاح!")
-                    st.rerun()
-
-st.write("---")
-st.caption("⚡ منصة نوفا التعليمية © 2026")
+            new_sec = st.text_input("تعديل الكود السري للأساتذة:", value=current_secret)
+            if st.button("حفظ الكود السري"):
+                update_setting("teacher_secret", new_sec)
+                st.success("تم تحديث الكود السري بنجاح!")
+                st.rerun()
