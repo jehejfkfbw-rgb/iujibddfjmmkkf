@@ -199,10 +199,8 @@ def render_live_chat(room_id, user_phone, user_name, user_role):
                         if st.button("🚨 حظر", key=f"ban_chat_{m_id}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                # حظر الطالب من الجدولين لضمان عدم دخوله نهائياً
                                 c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (s_phone,))
                                 c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (s_phone,))
-                                # حذف رسالته من الشات
                                 c.execute("DELETE FROM live_chat WHERE id=?", (m_id,))
                                 conn.commit()
                             st.success(f"تم حظر {s_name} بنجاح!")
@@ -395,9 +393,6 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==========================================
-# وظيفة إرسال الشكاوى المشتركة
-# ==========================================
 def render_complaint_section(phone, name, role):
     st.markdown("---")
     st.subheader("📢 إرسال شكوى أو بلاغ للمطور")
@@ -634,7 +629,6 @@ else:
         except:
             pass
 
-        # قسم الشكاوي للطالب
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
@@ -713,88 +707,130 @@ else:
 
         st.subheader("لوحة تحكم المطور 👑")
         
-        # تفريغ الشات
-        if st.button("🗑️ مسح وتفريغ جميع رسائل شات البث المباشر بالكامل"):
+        # اختيار القسم العلوي للمطور بدقة واضحة
+        dev_section = st.selectbox("اختر قسم التحكم:", [
+            "🛡️ إدارة الحظر (قائمة المستخدمين والأساتذة)", 
+            "📢 قسم الشكاوى والبلاغات الواردة", 
+            "📊 الإحصائيات وإدارة الشات"
+        ])
+        
+        st.write("---")
+
+        if dev_section == "🛡️ إدارة الحظر (قائمة المستخدمين والأساتذة)":
+            st.subheader("👥 جميع المستخدمين غير المحظورين (اضغط حظر عند اللزوم)")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("DELETE FROM live_chat")
-                    conn.commit()
-                st.success("تم مسح شات البث بالكامل بنجاح!")
-                st.rerun()
-            except:
-                st.error("حدث خطأ أثناء مسح الشات.")
+                    c.execute("SELECT phone, name, role FROM users WHERE is_blocked=0")
+                    active_users = c.fetchall()
+                    
+                    c.execute("SELECT phone, name, subject FROM teachers WHERE is_blocked=0")
+                    active_teachers = c.fetchall()
+                
+                st.markdown("#### الطلاب والمستخدمون:")
+                if active_users:
+                    for u_ph, u_name, u_role in active_users:
+                        col_u1, col_u2 = st.columns([3, 1])
+                        with col_u1:
+                            st.markdown(f"👤 **{u_name}** | هاتف: `{u_ph}` | النوع: {u_role}")
+                        with col_u2:
+                            if st.button(f"حظر 🚫", key=f"ban_u_{u_ph}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
+                                    c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (u_ph,))
+                                    conn.commit()
+                                st.success(f"تم حظر {u_name} نهائياً!")
+                                st.rerun()
+                else:
+                    st.info("لا يوجد طلاب أو مستخدمين متاحين حالياً.")
 
-        st.write("---")
-        st.subheader("🚨 قسم الشكاوى والبلاغات الواردة")
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT id, sender_phone, sender_name, role, complaint_text, timestamp FROM complaints ORDER BY id DESC")
-                comps = c.fetchall()
-            
-            if comps:
-                for c_id, c_ph, c_name, c_role, c_text, c_time in comps:
-                    st.markdown(f"""
-                    <div class='app-card'>
-                        <b>👤 الاسم:</b> {c_name} ({c_role})<br>
-                        <b>📞 الهاتف:</b> {c_ph}<br>
-                        <b>⏰ الوقت:</b> {c_time}<br>
-                        <b>📝 الشكوى:</b> {c_text}
-                    </div>
-                    """, unsafe_allow_html=True)
-                    if st.button(f"حذف الشكوى #{c_id}", key=f"del_comp_{c_id}"):
+                st.markdown("#### الأساتذة:")
+                if active_teachers:
+                    for t_ph, t_name, t_sub in active_teachers:
+                        col_t1, col_t2 = st.columns([3, 1])
+                        with col_t1:
+                            st.markdown(f"👨‍🏫 **{t_name}** | مادة: {t_sub} | هاتف: `{t_ph}`")
+                        with col_t2:
+                            if st.button(f"حظر 🚫", key=f"ban_t_{t_ph}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (t_ph,))
+                                    c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (t_ph,))
+                                    conn.commit()
+                                st.success(f"تم حظر الأستاذ {t_name} نهائياً!")
+                                st.rerun()
+                else:
+                    st.info("لا يوجد أساتذة نشطين حالياً.")
+            except:
+                pass
+
+            st.write("---")
+            st.subheader("🔓 فك الحظر عن مستخدم محظور")
+            with st.form("admin_unban_form"):
+                unban_phone_input = st.text_input("أدخل رقم هاتف المستخدم لفك الحظر عنه:")
+                unban_btn = st.form_submit_button("فك الحظر")
+                if unban_btn and unban_phone_input:
+                    try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
-                            c.execute("DELETE FROM complaints WHERE id=?", (c_id,))
+                            c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
+                            c.execute("UPDATE teachers SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
                             conn.commit()
-                        st.rerun()
-            else:
-                st.info("لا توجد شكاوى أو بلاغات حالياً.")
-        except:
-            pass
+                        st.success(f"تم فك الحظر عن الرقم {unban_phone_input} بنجاح!")
+                    except:
+                        st.error("حدث خطأ أثناء فك الحظر.")
 
-        st.write("---")
-        st.subheader("🚫 حظر مستخدم أو أستاذ نهائياً من المنصة")
-        with st.form("admin_ban_form"):
-            ban_phone_input = st.text_input("أدخل رقم هاتف المستخدم (طالب أو أستاذ) المراد حظره:")
-            ban_btn = st.form_submit_button("تنفيذ الحظر النهائي")
-            if ban_btn and ban_phone_input:
+        elif dev_section == "📢 قسم الشكاوى والبلاغات الواردة":
+            st.subheader("🚨 الشكاوى والبلاغات")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, sender_phone, sender_name, role, complaint_text, timestamp FROM complaints ORDER BY id DESC")
+                    comps = c.fetchall()
+                
+                if comps:
+                    for c_id, c_ph, c_name, c_role, c_text, c_time in comps:
+                        st.markdown(f"""
+                        <div class='app-card'>
+                            <b>👤 الاسم:</b> {c_name} ({c_role})<br>
+                            <b>📞 الهاتف:</b> {c_ph}<br>
+                            <b>⏰ الوقت:</b> {c_time}<br>
+                            <b>📝 الشكوى:</b> {c_text}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        if st.button(f"حذف الشكوى #{c_id}", key=f"del_comp_{c_id}"):
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("DELETE FROM complaints WHERE id=?", (c_id,))
+                                conn.commit()
+                            st.rerun()
+                else:
+                    st.info("لا توجد شكاوى أو بلاغات حالياً.")
+            except:
+                pass
+
+        elif dev_section == "📊 الإحصائيات وإدارة الشات":
+            if st.button("🗑️ مسح وتفريغ جميع رسائل شات البث المباشر بالكامل"):
                 try:
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
-                        c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (ban_phone_input,))
-                        c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (ban_phone_input,))
+                        c.execute("DELETE FROM live_chat")
                         conn.commit()
-                    st.success(f"تم حظر الرقم {ban_phone_input} ومنعه من دخول المنصة نهائياً!")
+                    st.success("تم مسح شات البث بالكامل بنجاح!")
+                    st.rerun()
                 except:
-                    st.error("حدث خطأ أثناء الحظر.")
+                    st.error("حدث خطأ أثناء مسح الشات.")
 
-        st.write("---")
-        st.subheader("🔓 إلغاء حظر مستخدم")
-        with st.form("admin_unban_form"):
-            unban_phone_input = st.text_input("أدخل رقم هاتف المستخدم لفك الحظر عنه:")
-            unban_btn = st.form_submit_button("فك الحظر")
-            if unban_btn and unban_phone_input:
-                try:
-                    with sqlite3.connect(DB_NAME) as conn:
-                        c = conn.cursor()
-                        c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
-                        c.execute("UPDATE teachers SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
-                        conn.commit()
-                    st.success(f"تم فك الحظر عن الرقم {unban_phone_input} بنجاح!")
-                except:
-                    st.error("حدث خطأ أثناء فك الحظر.")
-
-        st.write("---")
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT COUNT(*) FROM users")
-                u_cnt = c.fetchone()[0]
-                c.execute("SELECT COUNT(*) FROM teachers")
-                t_cnt = c.fetchone()[0]
-            st.metric("عدد المستخدمين", u_cnt)
-            st.metric("عدد الأساتذة", t_cnt)
-        except:
-            pass
+            st.write("---")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT COUNT(*) FROM users")
+                    u_cnt = c.fetchone()[0]
+                    c.execute("SELECT COUNT(*) FROM teachers")
+                    t_cnt = c.fetchone()[0]
+                st.metric("عدد المستخدمين", u_cnt)
+                st.metric("عدد الأساتذة", t_cnt)
+            except:
+                pass
