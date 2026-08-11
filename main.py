@@ -123,16 +123,6 @@ def init_db():
 
 init_db()
 
-def get_setting(key, default=""):
-    try:
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("SELECT value FROM settings WHERE key=?", (key,))
-            row = c.fetchone()
-            return row[0] if row else default
-    except:
-        return default
-
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -161,17 +151,7 @@ def login_user(phone, role):
     st.query_params["nova_phone"] = phone
     st.query_params["nova_role"] = role
 
-def logout_user(room_id=None):
-    # عند تسجيل الخروج (خصوصاً للأستاذ عند انتهاء البث)، يتم مسح شات البث الخاص بغرفته بالكامل
-    if room_id:
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("DELETE FROM live_chat WHERE room_id=?", (room_id,))
-                conn.commit()
-        except:
-            pass
-            
+def logout_user():
     st.session_state.is_logged_in = False
     st.session_state.user_phone = ""
     st.session_state.user_role = None
@@ -413,7 +393,7 @@ if not st.session_state.is_logged_in:
     
     if role_choice == "طالب 👨‍🎓":
         st.markdown("<div class='app-card'>", unsafe_allow_html=True)
-        student_mode = st.radio("العملية:", ["تسجيل دخول", "حساب جديد"], horizontal=True)
+        student_mode = st.radio("العملية:", ["تسجيل دخول", "حساب جديد", "هل نسيت كلمة السر؟"], horizontal=True)
         st.write("---")
         
         if student_mode == "حساب جديد":
@@ -442,6 +422,31 @@ if not st.session_state.is_logged_in:
                                     st.rerun()
                         except:
                             pass
+                            
+        elif student_mode == "هل نسيت كلمة السر؟":
+            with st.form("student_forgot"):
+                st.subheader("استعادة كلمة السر (طالب)")
+                f_phone = st.text_input("أدخل رقم المحمول الخاص بك:")
+                new_pass = st.text_input("كلمة المرور الجديدة:", type="password")
+                reset_btn = st.form_submit_button("تغيير كلمة السر")
+                
+                if reset_btn:
+                    if f_phone and new_pass:
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT id FROM users WHERE phone=? AND role='طالب'", (f_phone,))
+                                if c.fetchone():
+                                    hashed_new = hash_password(new_pass)
+                                    c.execute("UPDATE users SET password=? WHERE phone=? AND role='طالب'", (hashed_new, f_phone))
+                                    conn.commit()
+                                    st.success("تم تغيير كلمة السر بنجاح! يمكنك تسجيل الدخول الآن.")
+                                else:
+                                    st.error("رقم المحمول غير مسجل في النظام!")
+                        except:
+                            pass
+                    else:
+                        st.error("الرجاء إدخال رقم الموبايل وكلمة المرور الجديدة.")
         else:
             with st.form("student_login"):
                 st.subheader("دخول الطالب")
@@ -472,7 +477,7 @@ if not st.session_state.is_logged_in:
 
     elif role_choice == "أستاذ 👨‍🏫":
         st.markdown("<div class='app-card'>", unsafe_allow_html=True)
-        teacher_mode = st.radio("العملية:", ["دخول الأستاذ", "حساب جديد للأستاذ"], horizontal=True)
+        teacher_mode = st.radio("العملية:", ["دخول الأستاذ", "حساب جديد للأستاذ", "هل نسيت كلمة السر؟"], horizontal=True)
         st.write("---")
         
         if teacher_mode == "حساب جديد للأستاذ":
@@ -501,6 +506,31 @@ if not st.session_state.is_logged_in:
                             pass
                     else:
                         st.error("الكود السري غير صحيح أو بيانات ناقصة!")
+                        
+        elif teacher_mode == "هل نسيت كلمة السر؟":
+            with st.form("teacher_forgot"):
+                st.subheader("استعادة كلمة السر (أستاذ)")
+                f_phone_t = st.text_input("أدخل رقم محمول الأستاذ:")
+                new_pass_t = st.text_input("كلمة المرور/الكود الجديد:", type="password")
+                reset_btn_t = st.form_submit_button("تحديث كلمة السر")
+                
+                if reset_btn_t:
+                    if f_phone_t and new_pass_t:
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT id FROM teachers WHERE phone=?", (f_phone_t,))
+                                if c.fetchone():
+                                    hashed_new_t = hash_password(new_pass_t)
+                                    c.execute("UPDATE teachers SET password=? WHERE phone=?", (hashed_new_t, f_phone_t))
+                                    conn.commit()
+                                    st.success("تم تحديث كلمة المرور للأستاذ بنجاح!")
+                                else:
+                                    st.error("رقم المحمول غير مسجل كأستاذ!")
+                        except:
+                            pass
+                    else:
+                        st.error("أدخل رقم الموبايل وكلمة السر الجديدة.")
         else:
             with st.form("teacher_login"):
                 st.subheader("دخول الأستاذ")
@@ -545,11 +575,9 @@ if not st.session_state.is_logged_in:
         st.markdown("</div>", unsafe_allow_html=True)
 
 else:
-    # جلب غرفة الأستاذ إن وجد
     t_phone = st.session_state.user_phone if st.session_state.user_role == "أستاذ" else None
     room_id = f"room_{t_phone}" if t_phone else None
 
-    # نافذة تسجيل الدخول للمستخدمين
     if st.session_state.user_role == "طالب":
         if st.button("🚪 تسجيل الخروج"):
             logout_user()
@@ -571,9 +599,8 @@ else:
             pass
 
     elif st.session_state.user_role == "أستاذ":
-        # زر إنهاء البث وتسجيل الخروج الذي يقوم بمسح شات البث بالكامل فوراً
-        if st.button("🚪 تسجيل الخروج وإنهاء البث (يتم مسح شات البث بالكامل تلقائياً)"):
-            logout_user(room_id=room_id)
+        if st.button("🚪 تسجيل الخروج"):
+            logout_user()
             st.rerun()
 
         try:
@@ -601,7 +628,6 @@ else:
             """
             components.html(stream_html, height=340)
             
-            # الشات الخاص بالأستاذ في البث
             render_live_chat(room_id, t_name)
 
         with tab_subs:
@@ -636,7 +662,20 @@ else:
             logout_user()
             st.rerun()
 
-        st.subheader("لوحة المطور")
+        st.subheader("لوحة تحكم المطور 👑")
+        
+        if st.button("🗑️ مسح وتفريغ جميع رسائل شات البث المباشر بالكامل"):
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM live_chat")
+                    conn.commit()
+                st.success("تم مسح شات البث بالكامل بنجاح!")
+                st.rerun()
+            except:
+                st.error("حدث خطأ أثناء مسح الشات.")
+
+        st.write("---")
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
