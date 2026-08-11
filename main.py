@@ -82,7 +82,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. إعداد قاعدة البيانات والجداول
+# 2. إعداد قاعدة البيانات والجداول (محدثة بالكامل)
 # ==========================================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
@@ -676,7 +676,6 @@ else:
     if st.session_state.user_role == "طالب":
         st.subheader("🎓 الأساتذة المتاحون في السيستم")
         
-        # زر إرسال بلاغ للمطور من طرف الطالب
         with st.expander("🚨 هل تواجه مشكلة؟ أرسل بلاغاً أو رسالة للمطور"):
             with st.form("student_report_form"):
                 rep_msg = st.text_area("اكتب تفاصيل المشكلة أو الشكوى:")
@@ -844,7 +843,7 @@ else:
                     st.rerun()
 
     # ------------------------------------------
-    # واجهة المطور (مع متابعة بلاغات الطلاب وحظرهم مع ذكر السبب)
+    # واجهة المطور
     # ------------------------------------------
     elif st.session_state.user_role == "مطور":
         st.subheader("👑 لوحة تحكم المطور الشاملة")
@@ -891,7 +890,7 @@ else:
                 for r_id, r_ph, r_name, r_msg, r_time, r_st in all_reports:
                     st.markdown(f"👤 **الطالب:** {r_name} (`{r_ph}`) | ⏰ **الوقت:** {r_time}")
                     st.markdown(f"💬 **محتوى البلاغ أو الرسالة:** {r_msg}")
-                    st.markdown(f"حالة البلاغ: **{'تمت معالجته ✅' : r_st == 'resolved' else 'قيد المراجعة ⏳'}**")
+                    st.markdown(f"حالة البلاغ: **{'تمت معالجته ✅' if r_st == 'resolved' else 'قيد المراجعة ⏳'}**")
                     
                     with st.form(f"report_action_form_{r_id}"):
                         block_reason = st.text_input("سبب الحظر أو الرد على البلاغ (اختياري):", key=f"reason_{r_id}")
