@@ -125,7 +125,6 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT, sender_phone TEXT, sender_name TEXT, role TEXT, complaint_text TEXT, timestamp TEXT)''')
 
-        # جدول الامتحانات الجديدة
         c.execute('''CREATE TABLE IF NOT EXISTS exams (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, question TEXT,
             opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT, correct_answer TEXT, timestamp TEXT)''')
@@ -228,7 +227,6 @@ def render_student_exams(teacher_phone):
                 st.markdown(f"**السؤال ({idx+1}): {q}**")
                 options = [o1, o2, o3, o4]
                 
-                # استخدام فورم لكل سؤال على حدة لتجنب تداخل الإجابات
                 with st.form(f"exam_q_{ex_id}"):
                     ans_choice = st.radio("اختر الإجابة الصحيحة:", options, key=f"ans_radio_{ex_id}")
                     submit_ans = st.form_submit_button("تأكيد الإجابة")
@@ -264,16 +262,22 @@ def display_student_media(teacher_phone, student_phone):
             for p_id, p_title, p_type, p_path, views in posts:
                 st.markdown(f"📌 **{p_title}** | 👁️ المشاهدات: **{views}**")
                 
-                with sqlite3.connect(DB_NAME) as conn:
-                    c = conn.cursor()
-                    c.execute("UPDATE posts SET views_count = views_count + 1 WHERE id=?", (p_id,))
-                    conn.commit()
+                # تحديث المشاهدات مرة واحدة عند العرض
+                try:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("UPDATE posts SET views_count = views_count + 1 WHERE id=?", (p_id,))
+                        conn.commit()
+                except:
+                    pass
 
-                if os.path.exists(p_path):
+                if p_path and os.path.exists(p_path):
                     if p_type == "image":
                         st.image(p_path)
                     elif p_type == "video":
                         st.video(p_path)
+                else:
+                    st.warning("⚠️ ملف الفيديو أو الصورة غير موجود في مسار التخزين.")
                 
                 with st.expander("💬 التعليقات والمناقشة"):
                     with sqlite3.connect(DB_NAME) as conn:
@@ -300,7 +304,7 @@ def display_student_media(teacher_phone, student_phone):
                             st.rerun()
                 st.write("---")
         else:
-            st.info("لا توجد منشورات متاحة حالياً.")
+            st.info("لا توجد منشورات أو فيديوهات متاحة حالياً من هذا الأستاذ.")
     except:
         pass
 
@@ -753,25 +757,31 @@ else:
             with st.form("upload_form", clear_on_submit=True):
                 p_title = st.text_input("عنوان الفيديو أو المحتوى:")
                 p_type = st.selectbox("النوع:", ["video", "image"])
-                uploaded_file = st.file_uploader("اختر الملف:", type=["mp4", "mov", "png", "jpg"])
+                uploaded_file = st.file_uploader("اختر الملف:", type=["mp4", "mov", "avi", "mkv", "png", "jpg", "jpeg"])
                 up_btn = st.form_submit_button("رفع ونشر الفوري")
 
                 if up_btn:
-                    if p_title and uploaded_file:
-                        file_path = os.path.join(MEDIA_DIR, uploaded_file.name)
-                        with open(file_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
+                    if p_title and uploaded_file is not None:
+                        # حفظ الملف بشكل آمن في مجلد الـ media
+                        file_extension = os.path.splitext(uploaded_file.name)[1]
+                        unique_filename = f"{t_phone}_{int(datetime.datetime.now().timestamp())}{file_extension}"
+                        file_path = os.path.join(MEDIA_DIR, unique_filename)
                         
                         try:
+                            with open(file_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                           (t_phone, p_title, p_type, file_path))
                                 conn.commit()
-                            st.success("تم رفع ونشر الفيديو بنجاح!")
+                            st.success("تم رفع ونشر الفيديو بنجاح وظهر لجميع طلابك!")
                             st.rerun()
-                        except:
-                            pass
+                        except Exception as e:
+                            st.error(f"حدث خطأ أثناء حفظ الملف: {e}")
+                    else:
+                        st.error("الرجاء كتابة عنوان الفيديو وإرفاق الملف بشكل صحيح.")
 
         with tab_manage_posts:
             st.subheader("🎬 قائمة فيديوهاتك المنشورة وإدارتها")
@@ -784,11 +794,13 @@ else:
                 if my_posts:
                     for mp_id, mp_title, mp_type, mp_path, mp_views in my_posts:
                         st.markdown(f"📌 **{mp_title}** | المشاهدات: {mp_views}")
-                        if os.path.exists(mp_path):
+                        if mp_path and os.path.exists(mp_path):
                             if mp_type == "image":
                                 st.image(mp_path, width=200)
                             else:
                                 st.video(mp_path)
+                        else:
+                            st.warning("⚠️ الملف غير موجود في المسار المحلي.")
                         
                         if st.button(f"🗑️ حذف الفيديو", key=f"teacher_del_post_{mp_id}"):
                             with sqlite3.connect(DB_NAME) as conn:
@@ -980,7 +992,7 @@ else:
                 if all_posts:
                     for p_id, p_tph, p_title, p_type, p_path, p_views in all_posts:
                         st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | المشاهدات: {p_views}")
-                        if os.path.exists(p_path):
+                        if p_path and os.path.exists(p_path):
                             if p_type == "image":
                                 st.image(p_path, width=200)
                             else:
