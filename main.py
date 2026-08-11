@@ -102,6 +102,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
             grade_level TEXT, age INTEGER, price REAL, image_url TEXT, room_id TEXT, is_blocked INTEGER DEFAULT 0)''')
             
+        # جدول الأرقام المسموح لها بالتسجيل كأستاذ (يتحكم فيها المطور)
+        c.execute('''CREATE TABLE IF NOT EXISTS allowed_teachers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE)''')
+            
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
             status TEXT DEFAULT 'pending', requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
@@ -122,6 +126,9 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
             
+        # إضافة رقم أستاذ افتراضي للتجربة كمثال
+        c.execute("INSERT OR IGNORE INTO allowed_teachers (phone) VALUES ('01000000000')")
+        
         conn.commit()
 
 init_db()
@@ -517,26 +524,38 @@ if not st.session_state.is_logged_in:
                 t_name_reg = st.text_input("اسم الأستاذ:")
                 t_phone_reg = st.text_input("رقم المحمول:")
                 t_sub_reg = st.text_input("المادة الدراسية:")
-                t_secret_code = st.text_input("الكود السري:", type="password")
-                t_signup_btn = st.form_submit_button("إنشاء")
+                t_secret_code = st.text_input("الكود السري (901000):", type="password")
+                t_signup_btn = st.form_submit_button("إنشاء الحساب")
                 
                 if t_signup_btn:
                     if t_secret_code.strip() == "901000" and t_phone_reg:
+                        # التحقق هل الرقم مسجل مسبقاً في جدول الأستاذ المسموح لهم
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                hashed_t_pass = hash_password(t_secret_code)
-                                c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id, is_blocked) 
-                                           VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100.0, '', ?, 0)""", 
-                                          (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg, f"room_{t_phone_reg}"))
-                                c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
-                                conn.commit()
-                                login_user(t_phone_reg, "أستاذ")
-                                st.rerun()
+                                c.execute("SELECT phone FROM allowed_teachers WHERE phone=?", (t_phone_reg,))
+                                allowed_row = c.fetchone()
+                                
+                                if not allowed_row:
+                                    st.error("❌ هذا الرقم غير مسجل ومصرح له من قبل المطور! يرجى التواصل مع المطور لإضافة رقمك أولاً.")
+                                else:
+                                    # التحقق إذا كان الأستاذ مسجل بالفعل
+                                    c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
+                                    if c.fetchone():
+                                        st.error("هذا الرقم مسجل بحساب أستاذ بالفعل!")
+                                    else:
+                                        hashed_t_pass = hash_password(t_secret_code)
+                                        c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id, is_blocked) 
+                                                   VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100.0, '', ?, 0)""", 
+                                                  (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg, f"room_{t_phone_reg}"))
+                                        c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
+                                        conn.commit()
+                                        login_user(t_phone_reg, "أستاذ")
+                                        st.rerun()
                         except:
                             pass
                     else:
-                        st.error("الكود السري غير صحيح أو بيانات ناقصة!")
+                        st.error("الكود السري غير صحيح أو رقم المحمول ناقص!")
                         
         elif teacher_mode == "هل نسيت كلمة السر؟":
             with st.form("teacher_forgot"):
@@ -710,6 +729,7 @@ else:
         # اختيار القسم العلوي للمطور بدقة واضحة
         dev_section = st.selectbox("اختر قسم التحكم:", [
             "🛡️ إدارة الحظر (قائمة المستخدمين والأساتذة)", 
+            "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل",
             "📢 قسم الشكاوى والبلاغات الواردة", 
             "📊 الإحصائيات وإدارة الشات"
         ])
@@ -780,6 +800,46 @@ else:
                         st.success(f"تم فك الحظر عن الرقم {unban_phone_input} بنجاح!")
                     except:
                         st.error("حدث خطأ أثناء فك الحظر.")
+
+        elif dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
+            st.subheader("➕ إضافة رقم أستاذ جديد مسموح له بالتسجيل")
+            with st.form("add_allowed_teacher_form"):
+                new_t_phone = st.text_input("أدخل رقم محمول الأستاذ المسموح له:")
+                add_t_btn = st.form_submit_button("إضافة للقائمة المسموحة")
+                if add_t_btn and new_t_phone:
+                    try:
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("INSERT INTO allowed_teachers (phone) VALUES (?)", (new_t_phone,))
+                            conn.commit()
+                        st.success(f"تمت إضافة الرقم {new_t_phone} بنجاح! يمكنه الآن إنشاء حسابه.")
+                    except:
+                        st.error("هذا الرقم موجود مسبقاً في القائمة أو حدث خطأ.")
+
+            st.write("---")
+            st.subheader("📋 قائمة الأساتذة المصرح لهم حالياً:")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, phone FROM allowed_teachers")
+                    allowed_list = c.fetchall()
+                
+                if allowed_list:
+                    for a_id, a_ph in allowed_list:
+                        col_a1, col_a2 = st.columns([3, 1])
+                        with col_a1:
+                            st.markdown(f"📞 هاتف الأستاذ المصرح: `{a_ph}`")
+                        with col_a2:
+                            if st.button("حذف", key=f"del_allowed_{a_id}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM allowed_teachers WHERE id=?", (a_id,))
+                                    conn.commit()
+                                st.rerun()
+                else:
+                    st.info("لا توجد أرقام مسجلة حالياً.")
+            except:
+                pass
 
         elif dev_section == "📢 قسم الشكاوى والبلاغات الواردة":
             st.subheader("🚨 الشكاوى والبلاغات")
