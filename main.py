@@ -104,7 +104,7 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'active', expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
@@ -184,7 +184,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. دوال التحديث التلقائي والعرض (شات + تعليقات + مشاهدات)
+# 4. دوال التحديث التلقائي والعرض
 # ==========================================
 @st.fragment
 def render_live_chat(room_id, user_name):
@@ -296,24 +296,40 @@ def display_teacher_requests(teacher_phone):
                     st_display_age = st_data[1] if st_data else "غير محدد"
                     st_display_grade = st_data[2] if st_data else "غير محدد"
 
+                    status_text = "نشط ✅" if status == 'active' else "قيد الانتظار ⏳"
                     st.markdown(f"🎓 **{st_display_name}** | السن: {st_display_age} | المرحلة: {st_display_grade}")
-                    st.markdown(f"📱 هاتف المحفظة المحول منها: `{s_ph}` | الحالة: **{status}**")
+                    st.markdown(f"📱 هاتف المحفظة المحول منها: `{s_ph}` | الحالة: **{status_text}**")
                     
                     if expires_at:
                         st.markdown(f"⏱️ ينتهي الاشتراك في: `{expires_at}`")
 
-                    if st.button(f"❌ إلغاء اشتراك الطالب", key=f"ref_{s_ph}"):
+                    col_act1, col_act2 = st.columns(2)
+                    if status != 'active':
+                        if col_act1.button(f"✅ قبول الاشتراك", key=f.get('accept_sub', 'acc') + f"_{s_ph}"):
+                            exp_time = (datetime.datetime.now() + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", (exp_time, s_ph, teacher_phone))
+                            conn.commit()
+                            st.success("تم قبول وتفعيل اشتراك الطالب بنجاح!")
+                            st.rerun()
+                    else:
+                        if col_act1.button(f"⏳ تعليق الاشتراك", key=f"pend_{s_ph}"):
+                            c.execute("UPDATE subscriptions SET status='pending' WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                            conn.commit()
+                            st.warning("تم تحويل الاشتراك لقيد الانتظار.")
+                            st.rerun()
+
+                    if col_act2.button(f"❌ إلغاء / حذف", key=f"ref_{s_ph}"):
                         c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                         conn.commit()
-                        st.warning("تم إلغاء اشتراك الطالب.")
+                        st.warning("تم حذف طلب الطالب.")
                         st.rerun()
                     st.write("---")
             else:
-                st.info("لا توجد اشتراكات نشطة حالياً.")
+                st.info("لا توجد طلبات اشتراك حالياً.")
     except Exception as e:
         st.info(f"جارٍ تحديث الاشتراكات... ({e})")
 
-# دالة كارد الأستاذ عند الطالب (القبول الفوري وتفعيل شهر عند كتابة رقم التحويل)
+# دالة كارد الأستاذ عند الطالب (التحويل وقيد الانتظار لحين موافقة الأستاذ)
 @st.fragment
 def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, student_phone):
     st_autorefresh(interval=2000, key=f"student_card_refresh_{t_phone}")
@@ -336,7 +352,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     expires_at = sub_info[1] if sub_info else None
 
     is_expired = False
-    if expires_at:
+    if expires_at and sub_status == 'active':
         try:
             exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
             if datetime.datetime.now() > exp_dt:
@@ -345,7 +361,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             pass
 
     if sub_status == 'active' and not is_expired:
-        st.success("✅ تم قبولك فوراً ومقبول لمدة شهر - يمكنك المشاهدة والبث المباشر والشات الآن!")
+        st.success("✅ تم قبولك من الأستاذ! يمكنك مشاهدة الفيديوهات والبث المباشر والشات الآن.")
         tab_live, tab_media = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات والتعليقات"])
         with tab_live:
             stream_html = f"""
@@ -360,9 +376,13 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
         with tab_media:
             display_student_media(t_phone, student_phone)
             
+    elif sub_status == 'pending':
+        st.warning("⏳ تم إرسال رقم التحويل بنجاح وهو الآن **قيد الانتظار** لحين مراجعة الأستاذ وقبول التحويل.")
+        if st.button("🔄 تحديث الحالة", key=f"check_st_{t_phone}"):
+            st.rerun()
     else:
         if is_expired:
-            st.error("⏳ انتهى اشتراكك الشهري، يرجى إعادة تأكيد رقم التحويل للتجديد.")
+            st.error("⏳ انتهى اشتراكك الشهري، يرجى إعادة إرسال رقم التحويل للتجديد.")
         else:
             st.info("⚠️ غير مشترك مع هذا الأستاذ.")
             
@@ -373,18 +393,17 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
         """, unsafe_allow_html=True)
         
         with st.form(f"cash_pay_form_{t_phone}"):
-            cash_phone_used = st.text_input("أدخل رقم التليفون المحول منه الفلوس (فودافون/أورنج كاش):", value=student_phone)
-            pay_btn = st.form_submit_button("🚀 تأكيد التحويل والدخول فوراً (تفعيل شهر)")
+            cash_phone_used = st.text_input("أدخل رقم التليفون المحول منه الفلوس بدقة:", value=student_phone)
+            pay_btn = st.form_submit_button("🚀 إرسال رقم التحويل وقيد الانتظار للموافقة")
             
             if pay_btn:
                 if cash_phone_used:
-                    expire_time = (datetime.datetime.now() + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
-                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, expires_at) VALUES (?, ?, 'active', ?)",
-                                  (cash_phone_used, t_phone, expire_time))
+                        c.execute("INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status) VALUES (?, ?, 'pending')",
+                                  (cash_phone_used, t_phone))
                         conn.commit()
-                    st.success("✔️ تم التحقق من رقم التحويل وقبولك فوراً لمدة شهر بنجاح!")
+                    st.success("✔️ تم إرسال الطلب بنجاح وهو الآن قيد المراجعة من الأستاذ!")
                     st.rerun()
                 else:
                     st.error("يرجى إدخال رقم التليفون المحول منه!")
