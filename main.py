@@ -124,6 +124,11 @@ def init_db():
 
         c.execute('''CREATE TABLE IF NOT EXISTS complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT, sender_phone TEXT, sender_name TEXT, role TEXT, complaint_text TEXT, timestamp TEXT)''')
+
+        # جدول الامتحانات الجديدة
+        c.execute('''CREATE TABLE IF NOT EXISTS exams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, question TEXT,
+            opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT, correct_answer TEXT, timestamp TEXT)''')
             
         c.execute("INSERT OR IGNORE INTO allowed_teachers (phone) VALUES ('01000000000')")
         
@@ -207,7 +212,40 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
         pass
 
 # ==========================================
-# 5. عرض المحتوى والتحكم
+# 5. قسم الامتحانات للطالب
+# ==========================================
+@st.fragment
+def render_student_exams(teacher_phone):
+    st.subheader("📝 امتحانات واختبارات الأستاذ")
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT id, question, opt1, opt2, opt3, opt4, correct_answer FROM exams WHERE teacher_phone=? ORDER BY id DESC", (teacher_phone,))
+            exams = c.fetchall()
+            
+        if exams:
+            for idx, (ex_id, q, o1, o2, o3, o4, correct) in enumerate(exams):
+                st.markdown(f"**السؤال ({idx+1}): {q}**")
+                options = [o1, o2, o3, o4]
+                
+                # استخدام فورم لكل سؤال على حدة لتجنب تداخل الإجابات
+                with st.form(f"exam_q_{ex_id}"):
+                    ans_choice = st.radio("اختر الإجابة الصحيحة:", options, key=f"ans_radio_{ex_id}")
+                    submit_ans = st.form_submit_button("تأكيد الإجابة")
+                    
+                    if submit_ans:
+                        if ans_choice == correct:
+                            st.success("🎉 إجابة صحيحة برافو عليك!")
+                        else:
+                            st.error(f"❌ إجابة خاطئة. الإجابة الصحيحة هي: {correct}")
+                st.write("---")
+        else:
+            st.info("لا توجد امتحانات مضافة من هذا الأستاذ حالياً.")
+    except:
+        pass
+
+# ==========================================
+# 6. عرض المحتوى والتحكم
 # ==========================================
 @st.fragment
 def display_student_media(teacher_phone, student_phone):
@@ -307,7 +345,6 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     
-    # محاكاة صورة الأستاذ واسمه كمفتاح ضغط رئيسي
     st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
     st.markdown(f"📖 **المادة:** {t_sub} | 💰 **سعر الاشتراك (30 يوم):** {t_price} جـ")
     
@@ -343,7 +380,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                 conn.commit()
             st.rerun()
 
-        tab_live, tab_media, tab_chat = st.tabs(["🔴 البث المباشر والشات العام", "🎬 الفيديوهات", "💬 الشات الخاص مع الأستاذ"])
+        tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
         with tab_live:
             stream_html = f"""
             <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
@@ -355,6 +392,9 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             
         with tab_media:
             display_student_media(t_phone, student_phone)
+            
+        with tab_exams:
+            render_student_exams(t_phone)
             
         with tab_chat:
             render_smart_chat(t_phone, student_phone, "طالب")
@@ -409,7 +449,7 @@ def render_complaint_section(phone, name, role):
                 st.error("حدث خطأ أثناء الإرسال.")
 
 # ==========================================
-# 6. الواجهة الرئيسية
+# 7. الواجهة الرئيسية
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>⚡ منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
 st.write("---")
@@ -664,8 +704,8 @@ else:
 
         st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
         
-        tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_smart_chat = st.tabs([
-            "🔴 البث المباشر", "👥 طلبات الطلاب", "📤 رفع فيديو", "🎬 فيديوهاتي ومراجعتها", "💬 الشات الذكي"
+        tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
+            "🔴 البث", "👥 الطلبات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
         ])
 
         with tab_broadcast:
@@ -728,13 +768,13 @@ else:
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                           (t_phone, p_title, p_type, file_path))
                                 conn.commit()
-                            st.success("تم رفع ونشر الفيديو بنجاح! ظهر الآن في تبويب (فيديوهاتي ومراجعتها) وتستطيع حذفه في أي وقت.")
+                            st.success("تم رفع ونشر الفيديو بنجاح!")
                             st.rerun()
                         except:
                             pass
 
         with tab_manage_posts:
-            st.subheader("🎬 قائمة فيديوهاتك المنشورة (إمكانية المراجعة والحذف الفوري)")
+            st.subheader("🎬 قائمة فيديوهاتك المنشورة وإدارتها")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -750,18 +790,67 @@ else:
                             else:
                                 st.video(mp_path)
                         
-                        col_d1, col_d2 = st.columns([1, 3])
-                        with col_d1:
-                            if st.button("🗑️ حذف الفيديو", key=f"teacher_del_post_{mp_id}"):
-                                with sqlite3.connect(DB_NAME) as conn:
-                                    c = conn.cursor()
-                                    c.execute("DELETE FROM posts WHERE id=?", (mp_id,))
-                                    conn.commit()
-                                st.success("تم حذف الفيديو بنجاح!")
-                                st.rerun()
+                        if st.button(f"🗑️ حذف الفيديو", key=f"teacher_del_post_{mp_id}"):
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("DELETE FROM posts WHERE id=?", (mp_id,))
+                                conn.commit()
+                            st.success("تم حذف الفيديو بنجاح!")
+                            st.rerun()
                         st.write("---")
                 else:
                     st.info("لم تقم برفع أي فيديوهات بعد.")
+            except:
+                pass
+
+        with tab_exams_manage:
+            st.subheader("📝 إنشاء وإضافة أسئلة الامتحان لطلابك")
+            with st.form("create_exam_form", clear_on_submit=True):
+                q_text = st.text_area("نص السؤال:")
+                o1 = st.text_input("الاختيار الأول:")
+                o2 = st.text_input("الاختيار الثاني:")
+                o3 = st.text_input("الاختيار الثالث:")
+                o4 = st.text_input("الاختيار الرابع:")
+                correct_opt = st.text_input("الإجابة الصحيحة بالضبط (اكتبها كما كتبتها في الاختيارات أعلاه):")
+                add_exam_btn = st.form_submit_button("نشر السؤال لطلابك")
+
+                if add_exam_btn:
+                    if q_text and o1 and o2 and correct_opt:
+                        t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("INSERT INTO exams (teacher_phone, question, opt1, opt2, opt3, opt4, correct_answer, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                          (t_phone, q_text, o1, o2, o3, o4, correct_opt, t_now_str))
+                                conn.commit()
+                            st.success("تم إضافة السؤال بنجاح وظهر لطلابك المشتركين!")
+                            st.rerun()
+                        except:
+                            pass
+                    else:
+                        st.error("الرجاء إدخال السؤال واختيارين على الأقل وتحديد الإجابة الصحيحة.")
+
+            st.write("---")
+            st.subheader("📋 الأسئلة التي أنشأتها مسبقاً:")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, question, correct_answer FROM exams WHERE teacher_phone=?", (t_phone,))
+                    t_exams = c.fetchall()
+                
+                if t_exams:
+                    for te_id, te_q, te_c in t_exams:
+                        st.markdown(f"❓ **السؤال:** {te_q} <br>✅ **الإجابة الصحيحة:** `{te_c}`", unsafe_allow_html=True)
+                        if st.button(f"🗑️ حذف السؤال", key=f"del_exam_{te_id}"):
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("DELETE FROM exams WHERE id=?", (te_id,))
+                                conn.commit()
+                            st.success("تم الحذف!")
+                            st.rerun()
+                        st.write("---")
+                else:
+                    st.info("لا توجد أسئلة مضافة بعد.")
             except:
                 pass
 
