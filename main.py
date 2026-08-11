@@ -114,7 +114,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, student_name TEXT, comment_text TEXT, timestamp TEXT)''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS live_chat (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT, sender_name TEXT, message TEXT, timestamp TEXT)''')
+            id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT, sender_phone TEXT, sender_name TEXT, message TEXT, timestamp TEXT)''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS complaints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, sender_phone TEXT, sender_name TEXT, role TEXT, complaint_text TEXT, timestamp TEXT)''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY, value TEXT)''')
@@ -158,10 +161,10 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. الشات التفاعلي للبث المباشر
+# 4. الشات التفاعلي للبث المباشر مع الحظر
 # ==========================================
 @st.fragment
-def render_live_chat(room_id, user_name):
+def render_live_chat(room_id, user_phone, user_name, user_role):
     st_autorefresh(interval=2000, key=f"chat_refresh_{room_id}")
     st.markdown("💬 **شات البث المباشر:**")
     
@@ -173,8 +176,8 @@ def render_live_chat(room_id, user_name):
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("INSERT INTO live_chat (room_id, sender_name, message, timestamp) VALUES (?, ?, ?, ?)",
-                              (room_id, user_name, msg, t_now))
+                    c.execute("INSERT INTO live_chat (room_id, sender_phone, sender_name, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+                              (room_id, user_phone, user_name, msg, t_now))
                     conn.commit()
                 st.rerun()
             except:
@@ -183,15 +186,27 @@ def render_live_chat(room_id, user_name):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT sender_name, message, timestamp FROM live_chat WHERE room_id=? ORDER BY id DESC LIMIT 15", (room_id,))
+            c.execute("SELECT id, sender_phone, sender_name, message, timestamp FROM live_chat WHERE room_id=? ORDER BY id DESC LIMIT 15", (room_id,))
             messages = c.fetchall()
             
         if messages:
-            chat_box_html = "<div style='background: #1e293b; color: #fff; padding: 12px; border-radius: 12px; height: 200px; overflow-y: auto; direction: rtl;'>"
-            for s_name, s_msg, s_time in reversed(messages):
-                chat_box_html += f"<div style='margin-bottom: 6px;'><small style='color: #94a3b8;'>[{s_time}]</small> <b>{s_name}:</b> {s_msg}</div>"
-            chat_box_html += "</div>"
-            st.markdown(chat_box_html, unsafe_allow_html=True)
+            for m_id, s_phone, s_name, s_msg, s_time in reversed(messages):
+                col_m1, col_m2 = st.columns([4, 1])
+                with col_m1:
+                    st.markdown(f"<div style='background: #1e293b; color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 4px;'><small style='color: #94a3b8;'>[{s_time}]</small> <b>{s_name}:</b> {s_msg}</div>", unsafe_allow_html=True)
+                with col_m2:
+                    if user_role in ["أستاذ", "مطور"] and s_phone:
+                        if st.button("🚨 حظر", key=f"ban_chat_{m_id}"):
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                # حظر الطالب من الجدولين لضمان عدم دخوله نهائياً
+                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (s_phone,))
+                                c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (s_phone,))
+                                # حذف رسالته من الشات
+                                c.execute("DELETE FROM live_chat WHERE id=?", (m_id,))
+                                conn.commit()
+                            st.success(f"تم حظر {s_name} بنجاح!")
+                            st.rerun()
         else:
             st.info("لا توجد رسائل حالياً في البث.")
     except:
@@ -344,7 +359,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             </iframe>
             """
             components.html(stream_html, height=320)
-            render_live_chat(room_id, st_current_name)
+            render_live_chat(room_id, student_phone, st_current_name, "طالب")
             
         with tab_media:
             display_student_media(t_phone, student_phone)
@@ -379,6 +394,27 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                     st.error("أدخل رقم المحمول!")
                     
     st.markdown('</div>', unsafe_allow_html=True)
+
+# ==========================================
+# وظيفة إرسال الشكاوى المشتركة
+# ==========================================
+def render_complaint_section(phone, name, role):
+    st.markdown("---")
+    st.subheader("📢 إرسال شكوى أو بلاغ للمطور")
+    with st.form("complaint_form", clear_on_submit=True):
+        c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ ضد أي مستخدم أو مشكلة:")
+        c_submit = st.form_submit_button("إرسال الشكوى للمطور")
+        if c_submit and c_text:
+            t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("INSERT INTO complaints (sender_phone, sender_name, role, complaint_text, timestamp) VALUES (?, ?, ?, ?, ?)",
+                              (phone, name, role, c_text, t_now))
+                    conn.commit()
+                st.success("تم إرسال شكواك بنجاح للمطور وسيتم مراجعتها فوراً.")
+            except:
+                st.error("حدث خطأ أثناء الإرسال.")
 
 # ==========================================
 # 5. الواجهة الرئيسية
@@ -465,7 +501,7 @@ if not st.session_state.is_logged_in:
                         if user_row:
                             p_val, is_blocked = user_row
                             if is_blocked == 1:
-                                st.error("الحساب محظور!")
+                                st.error("❌ حسابك محظور من قبل الإدارة والمطور!")
                             else:
                                 login_user(p_val, "طالب")
                                 st.rerun()
@@ -549,7 +585,7 @@ if not st.session_state.is_logged_in:
                         if t_row:
                             p_val, t_blocked = t_row
                             if t_blocked == 1:
-                                st.error("الحساب محظور!")
+                                st.error("❌ حساب الأستاذ محظور من قبل المطور!")
                             else:
                                 login_user(p_val, "أستاذ")
                                 st.rerun()
@@ -598,6 +634,17 @@ else:
         except:
             pass
 
+        # قسم الشكاوي للطالب
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT name FROM users WHERE phone=?", (st.session_state.user_phone,))
+                r_st = c.fetchone()
+                st_name_val = r_st[0] if r_st else "طالب"
+            render_complaint_section(st.session_state.user_phone, st_name_val, "طالب")
+        except:
+            pass
+
     elif st.session_state.user_role == "أستاذ":
         if st.button("🚪 تسجيل الخروج"):
             logout_user()
@@ -628,7 +675,7 @@ else:
             """
             components.html(stream_html, height=340)
             
-            render_live_chat(room_id, t_name)
+            render_live_chat(room_id, t_phone, t_name, "أستاذ")
 
         with tab_subs:
             display_teacher_requests(t_phone)
@@ -657,6 +704,8 @@ else:
                         except:
                             pass
 
+        render_complaint_section(t_phone, t_name, "أستاذ")
+
     elif st.session_state.user_role == "مطور":
         if st.button("🚪 تسجيل الخروج"):
             logout_user()
@@ -664,6 +713,7 @@ else:
 
         st.subheader("لوحة تحكم المطور 👑")
         
+        # تفريغ الشات
         if st.button("🗑️ مسح وتفريغ جميع رسائل شات البث المباشر بالكامل"):
             try:
                 with sqlite3.connect(DB_NAME) as conn:
@@ -674,6 +724,67 @@ else:
                 st.rerun()
             except:
                 st.error("حدث خطأ أثناء مسح الشات.")
+
+        st.write("---")
+        st.subheader("🚨 قسم الشكاوى والبلاغات الواردة")
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, sender_phone, sender_name, role, complaint_text, timestamp FROM complaints ORDER BY id DESC")
+                comps = c.fetchall()
+            
+            if comps:
+                for c_id, c_ph, c_name, c_role, c_text, c_time in comps:
+                    st.markdown(f"""
+                    <div class='app-card'>
+                        <b>👤 الاسم:</b> {c_name} ({c_role})<br>
+                        <b>📞 الهاتف:</b> {c_ph}<br>
+                        <b>⏰ الوقت:</b> {c_time}<br>
+                        <b>📝 الشكوى:</b> {c_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(f"حذف الشكوى #{c_id}", key=f"del_comp_{c_id}"):
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM complaints WHERE id=?", (c_id,))
+                            conn.commit()
+                        st.rerun()
+            else:
+                st.info("لا توجد شكاوى أو بلاغات حالياً.")
+        except:
+            pass
+
+        st.write("---")
+        st.subheader("🚫 حظر مستخدم أو أستاذ نهائياً من المنصة")
+        with st.form("admin_ban_form"):
+            ban_phone_input = st.text_input("أدخل رقم هاتف المستخدم (طالب أو أستاذ) المراد حظره:")
+            ban_btn = st.form_submit_button("تنفيذ الحظر النهائي")
+            if ban_btn and ban_phone_input:
+                try:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (ban_phone_input,))
+                        c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (ban_phone_input,))
+                        conn.commit()
+                    st.success(f"تم حظر الرقم {ban_phone_input} ومنعه من دخول المنصة نهائياً!")
+                except:
+                    st.error("حدث خطأ أثناء الحظر.")
+
+        st.write("---")
+        st.subheader("🔓 إلغاء حظر مستخدم")
+        with st.form("admin_unban_form"):
+            unban_phone_input = st.text_input("أدخل رقم هاتف المستخدم لفك الحظر عنه:")
+            unban_btn = st.form_submit_button("فك الحظر")
+            if unban_btn and unban_phone_input:
+                try:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("UPDATE users SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
+                        c.execute("UPDATE teachers SET is_blocked=0 WHERE phone=?", (unban_phone_input,))
+                        conn.commit()
+                    st.success(f"تم فك الحظر عن الرقم {unban_phone_input} بنجاح!")
+                except:
+                    st.error("حدث خطأ أثناء فك الحظر.")
 
         st.write("---")
         try:
