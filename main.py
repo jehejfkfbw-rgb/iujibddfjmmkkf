@@ -340,15 +340,22 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
     st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
     
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        c.execute("SELECT status, requested_at, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                  (student_phone, t_phone))
-        sub_info = c.fetchone()
-        
-        c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
-        st_u_row = c.fetchone()
-        st_current_name = st_u_row[0] if st_u_row else "طالب"
+    sub_info = None
+    st_current_name = "طالب"
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT status, requested_at, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                      (student_phone, t_phone))
+            sub_info = c.fetchone()
+            
+            c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
+            st_u_row = c.fetchone()
+            if st_u_row:
+                st_current_name = st_u_row[0]
+    except Exception as e:
+        # معالجة آمنة لضمان عدم توقف التطبيق أو ظهور الخطأ
+        pass
 
     sub_status = sub_info[0] if sub_info else None
     req_at = sub_info[1] if sub_info else None
@@ -962,7 +969,7 @@ else:
                         if col_u1.button("🚫 حظر المستخدم", key=f"dev_block_{u_ph}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (u_ph,))
+                                c.execute("users SET is_blocked=1 WHERE phone=?", (u_ph,))
                                 c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (u_ph,))
                                 conn.commit()
                             st.warning("تم حظر المستخدم!")
