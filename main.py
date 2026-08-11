@@ -119,11 +119,11 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS live_chat (
             id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT, sender_phone TEXT, sender_name TEXT, message TEXT, timestamp TEXT)''')
 
+        c.execute('''CREATE TABLE IF NOT EXISTS smart_chat (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, student_phone TEXT, sender_role TEXT, message TEXT, timestamp TEXT)''')
+
         c.execute('''CREATE TABLE IF NOT EXISTS complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT, sender_phone TEXT, sender_name TEXT, role TEXT, complaint_text TEXT, timestamp TEXT)''')
-
-        c.execute('''CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY, value TEXT)''')
             
         c.execute("INSERT OR IGNORE INTO allowed_teachers (phone) VALUES ('01000000000')")
         
@@ -166,23 +166,24 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. الشات والمحتوى والطلبات
+# 4. الشات الذكي بين الأستاذ والطالب
 # ==========================================
 @st.fragment
-def render_live_chat(room_id, user_phone, user_name, user_role):
-    st_autorefresh(interval=2000, key=f"chat_refresh_{room_id}")
-    st.markdown("💬 **شات البث المباشر:**")
+def render_smart_chat(teacher_phone, student_phone, current_user_role):
+    st_autorefresh(interval=2000, key=f"smart_chat_ref_{teacher_phone}_{student_phone}")
+    st.markdown("💬 **الشات الخاص المباشر:**")
     
-    with st.form(f"chat_form_{room_id}", clear_on_submit=True):
-        msg = st.text_input("اكتب رسالة في الشات...")
-        send_btn = st.form_submit_button("إرسال")
+    with st.form(f"smart_chat_form_{teacher_phone}_{student_phone}", clear_on_submit=True):
+        msg = st.text_input("اكتب رسالتك هنا...")
+        send_btn = st.form_submit_button("إرسال الرسالة")
         if send_btn and msg:
-            t_now = datetime.datetime.now().strftime("%H:%M:%S")
+            t_now = datetime.datetime.now().strftime("%H:%M")
+            sender_role = "أستاذ" if current_user_role == "أستاذ" else "طالب"
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("INSERT INTO live_chat (room_id, sender_phone, sender_name, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-                              (room_id, user_phone, user_name, msg, t_now))
+                    c.execute("INSERT INTO smart_chat (teacher_phone, student_phone, sender_role, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+                              (teacher_phone, student_phone, sender_role, msg, t_now))
                     conn.commit()
                 st.rerun()
             except:
@@ -191,30 +192,23 @@ def render_live_chat(room_id, user_phone, user_name, user_role):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT id, sender_phone, sender_name, message, timestamp FROM live_chat WHERE room_id=? ORDER BY id DESC LIMIT 15", (room_id,))
-            messages = c.fetchall()
+            c.execute("SELECT sender_role, message, timestamp FROM smart_chat WHERE teacher_phone=? AND student_phone=? ORDER BY id DESC LIMIT 15", 
+                      (teacher_phone, student_phone))
+            chats = c.fetchall()
             
-        if messages:
-            for m_id, s_phone, s_name, s_msg, s_time in reversed(messages):
-                col_m1, col_m2 = st.columns([4, 1])
-                with col_m1:
-                    st.markdown(f"<div style='background: #1e293b; color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 4px;'><small style='color: #94a3b8;'>[{s_time}]</small> <b>{s_name}:</b> {s_msg}</div>", unsafe_allow_html=True)
-                with col_m2:
-                    if user_role in ["أستاذ", "مطور"] and s_phone:
-                        if st.button("🚨 حظر", key=f"ban_chat_{m_id}"):
-                            with sqlite3.connect(DB_NAME) as conn:
-                                c = conn.cursor()
-                                c.execute("UPDATE users SET is_blocked=1 WHERE phone=?", (s_phone,))
-                                c.execute("UPDATE teachers SET is_blocked=1 WHERE phone=?", (s_phone,))
-                                c.execute("DELETE FROM live_chat WHERE id=?", (m_id,))
-                                conn.commit()
-                            st.success(f"تم حظر {s_name} بنجاح!")
-                            st.rerun()
+        if chats:
+            for s_role, s_msg, s_time in reversed(chats):
+                bg_color = "#4f46e5" if s_role == "أستاذ" else "#1e293b"
+                align_style = "text-align: right;"
+                st.markdown(f"<div style='background: {bg_color}; color: #fff; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; {align_style}'><small style='color: #cbd5e1;'>[{s_time}] <b>{s_role}:</b></small><br>{s_msg}</div>", unsafe_allow_html=True)
         else:
-            st.info("لا توجد رسائل حالياً في البث.")
+            st.info("لا توجد رسائل سابقة في الشات الخاص. ابدأ المحادثة الآن!")
     except:
         pass
 
+# ==========================================
+# 5. عرض المحتوى والتحكم
+# ==========================================
 @st.fragment
 def display_student_media(teacher_phone, student_phone):
     st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}")
@@ -288,16 +282,16 @@ def display_teacher_requests(teacher_phone):
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
-                    st.markdown(f"🎓 **{st_display_name}** | هاتف المحفظة: `{s_ph}` | الحالة: **{status}**")
+                    st.markdown(f"🎓 **{st_display_name}** | هاتف المحفظة المحول منه: `{s_ph}` | الحالة: **{status}**")
                     
                     col_act1, col_act2 = st.columns(2)
                     if status != 'active':
-                        if col_act1.button(f"✅ قبول", key=f"acc_{s_ph}"):
+                        if col_act1.button(f"✅ قبول الاشتراك", key=f"acc_{s_ph}"):
                             exp_time = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
                             c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", (exp_time, s_ph, teacher_phone))
                             conn.commit()
                             st.rerun()
-                    if col_act2.button(f"❌ حذف", key=f"ref_{s_ph}"):
+                    if col_act2.button(f"❌ حذف/رفض", key=f"ref_{s_ph}"):
                         c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
                         conn.commit()
                         st.rerun()
@@ -312,22 +306,18 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     st_autorefresh(interval=2000, key=f"student_card_refresh_{t_phone}")
     
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    
+    # محاكاة صورة الأستاذ واسمه كمفتاح ضغط رئيسي
     st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
-    st.markdown(f"📖 **المادة:** {t_sub} | 💰 **السعر:** {t_price} جـ")
+    st.markdown(f"📖 **المادة:** {t_sub} | 💰 **سعر الاشتراك (30 يوم):** {t_price} جـ")
     
     sub_info = None
-    st_current_name = "طالب"
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
             c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                       (student_phone, t_phone))
             sub_info = c.fetchone()
-            
-            c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
-            st_u_row = c.fetchone()
-            if st_u_row:
-                st_current_name = st_u_row[0]
     except:
         pass
 
@@ -344,7 +334,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             pass
 
     if sub_status == 'active' and not is_expired:
-        st.success("✅ مشترك مع الأستاذ (البث والمحتوى متاحان)")
+        st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
         
         if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone}"):
             with sqlite3.connect(DB_NAME) as conn:
@@ -353,7 +343,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                 conn.commit()
             st.rerun()
 
-        tab_live, tab_media = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات"])
+        tab_live, tab_media, tab_chat = st.tabs(["🔴 البث المباشر والشات العام", "🎬 الفيديوهات", "💬 الشات الخاص مع الأستاذ"])
         with tab_live:
             stream_html = f"""
             <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
@@ -362,22 +352,24 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             </iframe>
             """
             components.html(stream_html, height=320)
-            render_live_chat(room_id, student_phone, st_current_name, "طالب")
             
         with tab_media:
             display_student_media(t_phone, student_phone)
             
+        with tab_chat:
+            render_smart_chat(t_phone, student_phone, "طالب")
+            
     else:
-        st.info("⚠️ غير مشترك. قم بتحويل المصاريف وأدخل رقم المحمول أدناه:")
+        st.info("⚠️ غير مشترك. يرجى التحويل وإرسال رقم المحفظة المحول منها للانضمام:")
         st.markdown(f"""
         <div class="cash-box">
-            تحويل ({t_price} جـ) على محفظة: <b>01213783090</b>
+            تحويل مبلغ ({t_price} جـ) على محفظة فودافون كاش أو إنستاباي: <b>01213783090</b>
         </div>
         """, unsafe_allow_html=True)
         
         with st.form(f"cash_pay_form_{t_phone}"):
-            cash_phone_used = st.text_input("رقم المحمول المحول منه:", value=student_phone)
-            pay_btn = st.form_submit_button("إرسال طلب الانضمام")
+            cash_phone_used = st.text_input("أدخل رقم المحمول الذي قمت بالتحويل منه:", value=student_phone)
+            pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ")
             
             if pay_btn:
                 if cash_phone_used:
@@ -389,12 +381,12 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                             c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, requested_at) VALUES (?, ?, 'pending', ?)",
                                       (cash_phone_used, t_phone, t_now_str))
                             conn.commit()
-                        st.success("تم إرسال الطلب بنجاح!")
+                        st.success("تم إرسال طلب الاشتراك بنجاح! في انتظار موافقة الأستاذ.")
                         st.rerun()
                     except:
                         pass
                 else:
-                    st.error("أدخل رقم المحمول!")
+                    st.error("الرجاء إدخال رقم المحمول المحول منه!")
                     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -402,7 +394,7 @@ def render_complaint_section(phone, name, role):
     st.markdown("---")
     st.subheader("📢 إرسال شكوى أو بلاغ للمطور")
     with st.form("complaint_form", clear_on_submit=True):
-        c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ ضد أي مستخدم أو مشكلة:")
+        c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ:")
         c_submit = st.form_submit_button("إرسال الشكوى للمطور")
         if c_submit and c_text:
             t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -417,7 +409,7 @@ def render_complaint_section(phone, name, role):
                 st.error("حدث خطأ أثناء الإرسال.")
 
 # ==========================================
-# 5. الواجهة الرئيسية
+# 6. الواجهة الرئيسية
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>⚡ منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
 st.write("---")
@@ -534,7 +526,7 @@ if not st.session_state.is_logged_in:
                                 allowed_row = c.fetchone()
                                 
                                 if not allowed_row:
-                                    st.error("❌ هذا الرقم غير مسجل ومصرح له من قبل المطور! يرجى التواصل مع المطور لإضافة رقمك أولاً.")
+                                    st.error("❌ هذا الرقم غير مسجل ومصرح له من قبل المطور!")
                                 else:
                                     c.execute("SELECT id FROM teachers WHERE phone=?", (t_phone_reg,))
                                     if c.fetchone():
@@ -629,7 +621,7 @@ else:
             logout_user()
             st.rerun()
 
-        st.subheader("👨‍🏫 الأساتذة المتاحين")
+        st.subheader("👨‍🏫 الأساتذة المتاحين في المنصة")
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
@@ -640,7 +632,7 @@ else:
                 for t_name, t_sub, t_price, r_id, t_ph in teachers:
                     render_student_teacher_card(t_name, t_sub, t_price, r_id, t_ph, st.session_state.user_phone)
             else:
-                st.info("لا يوجد أساتذة حالياً.")
+                st.info("لا يوجد أساتذة متاحين حالياً.")
         except:
             pass
 
@@ -672,10 +664,12 @@ else:
 
         st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
         
-        tab_broadcast, tab_subs, tab_upload = st.tabs(["🔴 البث المباشر والشات", "👥 طلبات الطلاب", "📤 رفع فيديو"])
+        tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_smart_chat = st.tabs([
+            "🔴 البث المباشر", "👥 طلبات الطلاب", "📤 رفع فيديو", "🎬 فيديوهاتي ومراجعتها", "💬 الشات الذكي"
+        ])
 
         with tab_broadcast:
-            st.markdown("### إدارة البث المباشر")
+            st.markdown("### إدارة البث المباشر والشات العام")
             stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&autostart=1" 
                     style="width: 100%; height: 320px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
@@ -684,17 +678,43 @@ else:
             """
             components.html(stream_html, height=340)
             
-            render_live_chat(room_id, t_phone, t_name, "أستاذ")
+            st_autorefresh(interval=2000, key=f"chat_refresh_{room_id}")
+            st.markdown("💬 **شات البث المباشر العام:**")
+            with st.form(f"chat_form_{room_id}", clear_on_submit=True):
+                msg = st.text_input("اكتب رسالة في الشات العام...")
+                send_btn = st.form_submit_button("إرسال")
+                if send_btn and msg:
+                    t_now = datetime.datetime.now().strftime("%H:%M:%S")
+                    try:
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("INSERT INTO live_chat (room_id, sender_phone, sender_name, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+                                      (room_id, t_phone, t_name, msg, t_now))
+                            conn.commit()
+                        st.rerun()
+                    except:
+                        pass
+            
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, sender_phone, sender_name, message, timestamp FROM live_chat WHERE room_id=? ORDER BY id DESC LIMIT 10", (room_id,))
+                    messages = c.fetchall()
+                if messages:
+                    for m_id, s_phone, s_name, s_msg, s_time in reversed(messages):
+                        st.markdown(f"<div style='background: #1e293b; color: #fff; padding: 6px 10px; border-radius: 8px; margin-bottom: 4px;'><small style='color: #94a3b8;'>[{s_time}]</small> <b>{s_name}:</b> {s_msg}</div>", unsafe_allow_html=True)
+            except:
+                pass
 
         with tab_subs:
             display_teacher_requests(t_phone)
 
         with tab_upload:
             with st.form("upload_form", clear_on_submit=True):
-                p_title = st.text_input("عنوان الفيديو:")
+                p_title = st.text_input("عنوان الفيديو أو المحتوى:")
                 p_type = st.selectbox("النوع:", ["video", "image"])
                 uploaded_file = st.file_uploader("اختر الملف:", type=["mp4", "mov", "png", "jpg"])
-                up_btn = st.form_submit_button("رفع ونشر")
+                up_btn = st.form_submit_button("رفع ونشر الفوري")
 
                 if up_btn:
                     if p_title and uploaded_file:
@@ -708,10 +728,61 @@ else:
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                           (t_phone, p_title, p_type, file_path))
                                 conn.commit()
-                            st.success("تم الرفع بنجاح!")
+                            st.success("تم رفع ونشر الفيديو بنجاح! ظهر الآن في تبويب (فيديوهاتي ومراجعتها) وتستطيع حذفه في أي وقت.")
                             st.rerun()
                         except:
                             pass
+
+        with tab_manage_posts:
+            st.subheader("🎬 قائمة فيديوهاتك المنشورة (إمكانية المراجعة والحذف الفوري)")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT id, title, media_type, file_path, views_count FROM posts WHERE teacher_phone=?", (t_phone,))
+                    my_posts = c.fetchall()
+                
+                if my_posts:
+                    for mp_id, mp_title, mp_type, mp_path, mp_views in my_posts:
+                        st.markdown(f"📌 **{mp_title}** | المشاهدات: {mp_views}")
+                        if os.path.exists(mp_path):
+                            if mp_type == "image":
+                                st.image(mp_path, width=200)
+                            else:
+                                st.video(mp_path)
+                        
+                        col_d1, col_d2 = st.columns([1, 3])
+                        with col_d1:
+                            if st.button("🗑️ حذف الفيديو", key=f"teacher_del_post_{mp_id}"):
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM posts WHERE id=?", (mp_id,))
+                                    conn.commit()
+                                st.success("تم حذف الفيديو بنجاح!")
+                                st.rerun()
+                        st.write("---")
+                else:
+                    st.info("لم تقم برفع أي فيديوهات بعد.")
+            except:
+                pass
+
+        with tab_smart_chat:
+            st.subheader("💬 الشات الذكي الخاص مع الطلاب")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT DISTINCT student_phone FROM subscriptions WHERE teacher_phone=? AND status='active'", (t_phone,))
+                    active_subs_students = c.fetchall()
+                
+                if active_subs_students:
+                    student_phones_list = [s[0] for s in active_subs_students]
+                    selected_st_phone = st.selectbox("اختر الطالب لبدء أو متابعة المحادثة معه:", student_phones_list)
+                    
+                    if selected_st_phone:
+                        render_smart_chat(t_phone, selected_st_phone, "أستاذ")
+                else:
+                    st.info("لا توجد طلاب مشتركين حالياً لبدء الشات معهم.")
+            except:
+                pass
 
         render_complaint_section(t_phone, t_name, "أستاذ")
 
@@ -725,7 +796,7 @@ else:
         dev_section = st.selectbox("اختر قسم التحكم:", [
             "👑 إدارة وتعديل الأساتذة بالكامل",
             "🎓 إدارة وتعديل الطلاب بالكامل",
-            "🎬 إدارة محتوى ومنشورات الأساتذة",
+            "🎬 إدارة المحتوى ومنشورات الأساتذة وحذفها",
             "🛡️ إدارة الحظر والفك", 
             "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل",
             "📢 قسم الشكاوى والبلاغات", 
@@ -809,8 +880,8 @@ else:
             except:
                 pass
 
-        elif dev_section == "🎬 إدارة محتوى ومنشورات الأساتذة":
-            st.subheader("🎬 جميع فيديوهات ومنشورات الأساتذة")
+        elif dev_section == "🎬 إدارة المحتوى ومنشورات الأساتذة وحذفها":
+            st.subheader("🎬 جميع فيديوهات ومنشورات الأساتذة في المنصة")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -825,7 +896,7 @@ else:
                                 st.image(p_path, width=200)
                             else:
                                 st.video(p_path)
-                        if st.button(f"🗑️ حذف هذا المنشور/الفيديو", key=f"dev_del_post_{p_id}"):
+                        if st.button(f"🗑️ حذف هذا المنشور/الفيديو نهائياً", key=f"dev_del_post_{p_id}"):
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
                                 c.execute("DELETE FROM posts WHERE id=?", (p_id,))
