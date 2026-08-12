@@ -886,7 +886,7 @@ else:
             except:
                 t_room_name = "الأستاذ"
 
-            st.markdown(## 🏫 غرفة الأستاذ: {t_room_name})
+            st.markdown(f"## 🏫 غرفة الأستاذ: {t_room_name}")
 
             tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 البث المباشر الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
 
@@ -937,7 +937,6 @@ else:
 
         st.write("---")
         
-        # زر الدخول المباشر لغرفة البث والشرح الخاصة بالأستاذ
         if st.button("🚀 الدخول إلى غرفة الشرح والبث المباشر الخاصة بي"):
             st.session_state.sub_target_teacher = current_phone
             st.session_state.inside_teacher_room = True
@@ -946,7 +945,6 @@ else:
         st.write("---")
         t_tab2, t_tab3, t_tab4, t_tab5, t_tab6 = st.tabs(["👥 طلبات الاشتراكات", "📝 إدارة المنشورات", "💬 الشات مع الطلاب", "📝 الامتحانات والواجبات", "⚙️ الإعدادات"])
 
-        # إذا دخل الأستاذ غرفته الخاصة
         if st.session_state.inside_teacher_room and st.session_state.sub_target_teacher == current_phone:
             st.write("---")
             if st.button("⬅️ العودة للوحة التحكم الرئيسية للأستاذ"):
@@ -954,7 +952,7 @@ else:
                 st.session_state.sub_target_teacher = None
                 st.rerun()
 
-            st.markdown(## 🏫 غرفة البث والشرح الخاصة بك (الأستاذ))
+            st.markdown("## 🏫 غرفة البث والشرح الخاصة بك (الأستاذ)")
             render_live_broadcast_section(current_phone, is_subscriber=True, is_teacher_owner=True)
 
         with t_tab2:
