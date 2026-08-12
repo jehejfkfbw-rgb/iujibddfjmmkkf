@@ -7,7 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
 # ==========================================
-# 1. إعدادات التصميم الكلاسيكي القديم (Light Theme)
+# 1. إعدادات التصميم الكلاسيكي والشاشات الصغيرة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="📚", layout="centered", initial_sidebar_state="collapsed")
 
@@ -22,6 +22,8 @@ st.markdown("""
         max-width: 700px !important;
         padding-top: 1.5rem !important;
         padding-bottom: 3rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
     
     .stApp {
@@ -45,12 +47,23 @@ st.markdown("""
         margin-bottom: 15px !important;
     }
     
+    .stTextInput, .stSelectbox, .stNumberInput, .stTextArea {
+        margin-bottom: 15px !important;
+    }
+    
     .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea {
         background-color: #ffffff !important;
         color: #000000 !important;
         border: 1px solid #9ca3af !important;
         border-radius: 4px !important;
-        padding: 8px !important;
+        padding: 10px !important;
+        width: 100% !important;
+    }
+    
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: #ffffff !important;
+        border: 1px solid #9ca3af !important;
+        border-radius: 4px !important;
     }
     
     .stButton>button {
@@ -59,8 +72,9 @@ st.markdown("""
         border: 1px solid #9ca3af !important;
         border-radius: 4px !important;
         font-weight: bold !important;
-        padding: 8px 16px !important;
+        padding: 10px 16px !important;
         width: 100% !important;
+        margin-top: 10px !important;
     }
     
     .stButton>button:hover {
@@ -262,7 +276,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. وحدات النظام الداخلية البحتة (مع كاميرا البث المباشر)
+# 4. وحدات النظام الداخلية البحتة (الشات، البث، الامتحانات)
 # ==========================================
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
@@ -304,7 +318,44 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
 @st.fragment
 def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher_owner=False):
     st_autorefresh(interval=2500, key=f"live_broadcast_ref_{teacher_phone}")
-    st.subheader("📡 غرفة البث المباشر بالكاميرا الحية داخل التطبيق")
+    
+    if is_teacher_owner:
+        st.subheader("📡 التحكم في غرفة البث المباشر بالكاميرا الحية")
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT title, is_active, visibility, countdown_hours FROM live_broadcasts WHERE teacher_phone=?", (teacher_phone,))
+                b_setting = c.fetchone()
+        except:
+            b_setting = None
+
+        cur_b_title = b_setting[0] if b_setting else ""
+        cur_b_active = b_setting[1] if b_setting else 0
+        cur_b_vis = b_setting[2] if b_setting else "subscriber"
+        cur_b_cd = b_setting[3] if b_setting else 0
+
+        with st.form("teacher_live_settings_form_inside_room"):
+            live_title_input = st.text_input("عنوان البث المباشر:", value=cur_b_title)
+            live_active_toggle = st.selectbox("حالة البث:", ["إيقاف البث", "تشغيل البث المباشر"], index=1 if cur_b_active==1 else 0)
+            live_vis_input = st.selectbox("صلاحية المشاهدة:", ["subscriber (للمشتركين فقط)", "public (للرئيسية والجميع)"], index=0 if cur_b_vis=="subscriber" else 1)
+            live_countdown_input = st.number_input("مدة العد التنازلي للإغلاق بالساعات (0 لتعطيل العد):", min_value=0, value=int(cur_b_cd))
+            
+            if st.form_submit_button("حفظ إعدادات وبدء البث"):
+                new_active_val = 1 if live_active_toggle == "تشغيل البث المباشر" else 0
+                new_vis_val = "subscriber" if "للمشتركين" in live_vis_input else "public"
+                t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                try:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("""INSERT OR REPLACE INTO live_broadcasts (teacher_phone, title, is_active, visibility, countdown_hours, started_at) 
+                                   VALUES (?, ?, ?, ?, ?, ?)""", 
+                                  (teacher_phone, live_title_input, new_active_val, new_vis_val, int(live_countdown_input), t_now_str))
+                        conn.commit()
+                    st.success("تم تحديث إعدادات البث المباشر بنجاح!")
+                    st.rerun()
+                except:
+                    pass
+        st.write("---")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -343,7 +394,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                         pass
 
                 if is_teacher_owner:
-                    st.info("👨‍🏫 لوحة بث الأستاذ: يمكنك فتح الكاميرا لبث صورتك وصوتك مباشرة للطلاب داخل التطبيق:")
+                    st.info("👨‍🏫 لوحة بث الأستاذ: يمكنك فتح الكاميرا لبث صورتك وصوتك مباشرة للطلاب داخل الغرفة:")
                     RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
                     webrtc_streamer(
                         key=f"teacher_webcam_{teacher_phone}",
@@ -351,7 +402,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                         media_stream_constraints={"video": True, "audio": True},
                     )
                 else:
-                    st.info("👀 شاشة المشاهدة: يتم استقبال بث الأستاذ الحي الآن عبر الكاميرا:")
+                    st.info("👀 شاشة المشاهدة: يتم استقبال بث الأستاذ الحي الآن عبر الكاميرا داخل الغرفة:")
                     RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
                     webrtc_streamer(
                         key=f"student_webcam_viewer_{teacher_phone}",
@@ -359,9 +410,9 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                         media_stream_constraints={"video": True, "audio": False},
                     )
             else:
-                st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل المنصة. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل غرفة الأستاذ. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
-            st.info("لا يوجد بث مباشر نشط حالياً من هذا الأستاذ.")
+            st.info("لا يوجد بث مباشر نشط حالياً داخل هذه الغرفة.")
     except:
         pass
 
@@ -562,7 +613,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية داخل التطبيق</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية داخل الغرف</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -745,7 +796,6 @@ if not st.session_state.is_logged_in:
         st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # لوحة التحكم لمن قام بالدخول (طالب / أستاذ / مطور)
     current_phone = st.session_state.user_phone
     current_role = st.session_state.user_role
 
@@ -766,7 +816,7 @@ else:
                 c.execute("SELECT name, points, grade FROM users WHERE phone=?", (current_phone,))
                 u_data = c.fetchone()
                 if u_data:
-                    st.markdown(f"أهلاً بك يا **{u_data[0]}** | المرحة الدراسية: `{u_data[2]}` | نقاط التفوق: ⭐ **{u_data[1]}**")
+                    st.markdown(f"أهلاً بك يا **{u_data[0]}** | المرحلة الدراسية: `{u_data[2]}` | نقاط التفوق: ⭐ **{u_data[1]}**")
         except:
             pass
 
@@ -781,7 +831,6 @@ else:
             if teachers_list:
                 for t_ph, t_name, t_subj, t_prc in teachers_list:
                     with st.expander(f"الأستاذ: {t_name} - المادة: {t_subj} (السعر: {t_prc} جنيه)"):
-                        # فحص حالة الاشتراك
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
                             c.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (current_phone, t_ph))
@@ -792,7 +841,6 @@ else:
                         if sub_status == "active":
                             st.success("✅ أنت مشترك مع هذا الأستاذ بنجاح!")
                             
-                            # زر الدخول لغرفة الأستاذ
                             if st.button(f"الدخول لغرفة الأستاذ {t_name} 🚀", key=f"enter_room_{t_ph}"):
                                 st.session_state.sub_target_teacher = t_ph
                                 st.session_state.inside_teacher_room = True
@@ -821,7 +869,6 @@ else:
         except:
             pass
 
-        # إذا كان الطالب داخل غرفة أستاذ معين
         if st.session_state.inside_teacher_room and st.session_state.sub_target_teacher:
             t_ph_room = st.session_state.sub_target_teacher
             st.write("---")
@@ -839,9 +886,8 @@ else:
             except:
                 t_room_name = "الأستاذ"
 
-            st.markdown(f"## 🏫 غرفة الأستاذ: {t_room_name}")
+            st.markdown(## 🏫 غرفة الأستاذ: {t_room_name})
 
-            # تبويبات داخل غرفة الأستاذ
             tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 البث المباشر الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
 
             with tab_live:
@@ -890,48 +936,26 @@ else:
             pass
 
         st.write("---")
-        t_tab1, t_tab2, t_tab3, t_tab4, t_tab5, t_tab6 = st.tabs(["📡 البث المباشر (الكاميرا)", "👥 طلبات الاشتراكات", "📝 إدارة المنشورات", "💬 الشات مع الطلاب", "📝 الامتحانات والواجبات", "⚙️ الإعدادات"])
+        
+        # زر الدخول المباشر لغرفة البث والشرح الخاصة بالأستاذ
+        if st.button("🚀 الدخول إلى غرفة الشرح والبث المباشر الخاصة بي"):
+            st.session_state.sub_target_teacher = current_phone
+            st.session_state.inside_teacher_room = True
+            st.rerun()
 
-        with t_tab1:
-            st.markdown("### التحكم في غرفة البث المباشر بالكاميرا الحية")
-            try:
-                with sqlite3.connect(DB_NAME) as conn:
-                    c = conn.cursor()
-                    c.execute("SELECT title, is_active, visibility, countdown_hours FROM live_broadcasts WHERE teacher_phone=?", (current_phone,))
-                    b_setting = c.fetchone()
-            except:
-                b_setting = None
+        st.write("---")
+        t_tab2, t_tab3, t_tab4, t_tab5, t_tab6 = st.tabs(["👥 طلبات الاشتراكات", "📝 إدارة المنشورات", "💬 الشات مع الطلاب", "📝 الامتحانات والواجبات", "⚙️ الإعدادات"])
 
-            cur_b_title = b_setting[0] if b_setting else ""
-            cur_b_active = b_setting[1] if b_setting else 0
-            cur_b_vis = b_setting[2] if b_setting else "subscriber"
-            cur_b_cd = b_setting[3] if b_setting else 0
+        # إذا دخل الأستاذ غرفته الخاصة
+        if st.session_state.inside_teacher_room and st.session_state.sub_target_teacher == current_phone:
+            st.write("---")
+            if st.button("⬅️ العودة للوحة التحكم الرئيسية للأستاذ"):
+                st.session_state.inside_teacher_room = False
+                st.session_state.sub_target_teacher = None
+                st.rerun()
 
-            with st.form("teacher_live_settings_form"):
-                live_title_input = st.text_input("عنوان البث المباشر:", value=cur_b_title)
-                live_active_toggle = st.selectbox("حالة البث:", ["إيقاف البث", "تشغيل البث المباشر"], index=1 if cur_b_active==1 else 0)
-                live_vis_input = st.selectbox("صلاحية المشاهدة:", ["subscriber (للمشتركين فقط)", "public (للرئيسية والجميع)"], index=0 if cur_b_vis=="subscriber" else 1)
-                live_countdown_input = st.number_input("مدة العد التنازلي للإغلاق بالساعات (0 لتعطيل العد):", min_value=0, value=int(cur_b_cd))
-                
-                if st.form_submit_button("حفظ إعدادات وبدء البث"):
-                    new_active_val = 1 if live_active_toggle == "تشغيل البث المباشر" else 0
-                    new_vis_val = "subscriber" if "للمشتركين" in live_vis_input else "public"
-                    t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    try:
-                        with sqlite3.connect(DB_NAME) as conn:
-                            c = conn.cursor()
-                            c.execute("""INSERT OR REPLACE INTO live_broadcasts (teacher_phone, title, is_active, visibility, countdown_hours, started_at) 
-                                       VALUES (?, ?, ?, ?, ?, ?)""", 
-                                      (current_phone, live_title_input, new_active_val, new_vis_val, int(live_countdown_input), t_now_str))
-                            conn.commit()
-                        st.success("تم تحديث إعدادات البث المباشر بنجاح!")
-                        st.rerun()
-                    except:
-                        pass
-
-            # عرض شاشة بث الأستاذ عبر الكاميرا المباشرة إذا كان البث مفعل
-            if cur_b_active == 1:
-                render_live_broadcast_section(current_phone, is_subscriber=True, is_teacher_owner=True)
+            st.markdown(## 🏫 غرفة البث والشرح الخاصة بك (الأستاذ))
+            render_live_broadcast_section(current_phone, is_subscriber=True, is_teacher_owner=True)
 
         with t_tab2:
             st.markdown("### متابعة وقبول طلاب الاشتراك")
