@@ -44,6 +44,11 @@ st.markdown("""
         padding: 12px !important;
     }
     
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: #f1f5f9 !important;
+        border-radius: 12px !important;
+    }
+    
     .stButton>button {
         background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
         color: #ffffff !important;
@@ -89,10 +94,24 @@ def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         
-        # جدول المستخدمين (طلاب)
+        # جدول المستخدمين (طلاب) مع إضافة حقول: العمر، الصف، والمحافظة
         c.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, grade TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
+            id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, age TEXT, grade TEXT, governorate TEXT, role TEXT, is_blocked INTEGER DEFAULT 0)''')
         
+        # تحديث الجدول القديم إن لم تكن الأعمدة موجودة
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN age TEXT")
+        except:
+            pass
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN grade TEXT")
+        except:
+            pass
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN governorate TEXT")
+        except:
+            pass
+
         # جدول الأساتذة
         c.execute('''CREATE TABLE IF NOT EXISTS teachers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE, password TEXT, name TEXT, subject TEXT,
@@ -125,7 +144,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, question TEXT,
             opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT, correct_answer TEXT)''')
             
-        # إضافة رقم افتراضي كمثال للأستاذ المصرح له (يمكن للمطور تعديله)
+        # إضافة رقم افتراضي كمثال للأستاذ المصرح له
         c.execute("INSERT OR IGNORE INTO allowed_teachers (phone) VALUES ('01000000000')")
         
         conn.commit()
@@ -173,6 +192,15 @@ def logout_user():
     st.session_state.inside_teacher_room = False
     st.query_params.clear()
 
+# قائمة المحافظات المصرية
+EGYPT_GOVERNORATES = [
+    "القاهرة", "الإسكندرية", "الجيزة", "الدقهلية", "الشرقية", "القليوبية", 
+    "البحيرة", "الغربية", "منوفية", "كفر الشيخ", "الفيوم", "بني سويف", 
+    "المنيا", "أسيوط", "سوهاج", "قنا", "أسوان", "الأقصر", "البحر الأحمر", 
+    "الوادي الجديد", "مطروح", "شمال سيناء", "جنوب سيناء", "بورسعيد", 
+    "السويس", "الإسماعيلية", "دمياط"
+]
+
 # ==========================================
 # 4. واجهة تسجيل الدخول الرئيسية
 # ==========================================
@@ -187,20 +215,23 @@ if not st.session_state.is_logged_in:
     # ----------------- تسجيل ودخول الطالب -----------------
     if role_choice == "طالب 👨‍🎓":
         st.markdown("<div class='app-card'>", unsafe_allow_html=True)
-        student_mode = st.radio("العملية:", ["تسجيل دخول", "حساب جديد"], horizontal=True)
+        student_mode = st.radio("العملية:", ["تسجيل دخول", "حساب جديد", "نسيت كلمة السر"], horizontal=True)
         st.write("---")
         
+        # 1. إنشاء حساب جديد للطالب (بالاسم، الموبايل، السن، الصف، والمحافظة)
         if student_mode == "حساب جديد":
             with st.form("student_signup"):
                 st.subheader("حساب طالب جديد")
                 s_name = st.text_input("الاسم الكامل:")
                 s_phone = st.text_input("رقم المحمول:")
                 s_pass = st.text_input("كلمة المرور:", type="password")
-                s_grade = st.text_input("المرحلة الدراسية:")
+                s_age = st.text_input("السن (العمر):")
+                s_grade = st.text_input("الصف الدراسي:")
+                s_gov = st.selectbox("المحافظة:", EGYPT_GOVERNORATES)
                 s_signup_btn = st.form_submit_button("تسجيل الحساب")
                 
                 if s_signup_btn:
-                    if s_phone and s_pass:
+                    if s_phone and s_pass and s_age:
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
@@ -209,16 +240,19 @@ if not st.session_state.is_logged_in:
                                     st.error("رقم المحمول مسجل مسبقاً!")
                                 else:
                                     hashed = hash_password(s_pass)
-                                    c.execute("INSERT INTO users (phone, password, name, grade, role, is_blocked) VALUES (?, ?, ?, ?, 'طالب', 0)", 
-                                              (s_phone, hashed, s_name if s_name else "طالب", s_grade))
+                                    c.execute("""INSERT INTO users (phone, password, name, age, grade, governorate, role, is_blocked) 
+                                                 VALUES (?, ?, ?, ?, ?, ?, 'طالب', 0)""", 
+                                              (s_phone, hashed, s_name if s_name else "طالب", s_age, s_grade, s_gov))
                                     conn.commit()
                                     login_user(s_phone, "طالب")
                                     st.rerun()
                         except:
                             st.error("حدث خطأ أثناء التسجيل.")
                     else:
-                        st.error("الرجاء إدخال رقم المحمول وكلمة المرور.")
-        else:
+                        st.error("الرجاء إدخال رقم المحمول، كلمة المرور، والسن على الأقل.")
+        
+        # 2. تسجيل دخول الطالب
+        elif student_mode == "تسجيل دخول":
             with st.form("student_login"):
                 st.subheader("تسجيل دخول طالب")
                 s_phone_in = st.text_input("رقم المحمول:")
@@ -242,6 +276,36 @@ if not st.session_state.is_logged_in:
                             st.error("رقم المحمول أو كلمة المرور غير صحيحة!")
                     except:
                         st.error("حدث خطأ في الاتصال.")
+
+        # 3. استعادة كلمة المرور باستخدام رقم الموبايل والسن
+        else:
+            with st.form("student_forgot_pass"):
+                st.subheader("استعادة كلمة المرور للطالب")
+                st.write("أدخل رقم الموبايل والسن المسجل بهما حسابك لتعيين كلمة مرور جديدة:")
+                f_phone = st.text_input("رقم المحمول المسجل:")
+                f_age = st.text_input("السن المسجل في الحساب:")
+                new_pass = st.text_input("كلمة المرور الجديدة:", type="password")
+                reset_btn = st.form_submit_button("تحديث كلمة المرور")
+                
+                if reset_btn:
+                    if f_phone and f_age and new_pass:
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT id FROM users WHERE phone=? AND age=? AND role='طالب'", (f_phone, f_age))
+                                u_row = c.fetchone()
+                                if u_row:
+                                    new_hashed = hash_password(new_pass)
+                                    c.execute("UPDATE users SET password=? WHERE phone=?", (new_hashed, f_phone))
+                                    conn.commit()
+                                    st.success("✅ تم تحديث كلمة المرور بنجاح! يمكنك الانتقال لصفحة تسجيل الدخول الآن.")
+                                else:
+                                    st.error("❌ بيانات التحقق غير صحيحة (رقم الموبايل أو السن غير مطابقين للبيانات المسجلة).")
+                        except:
+                            st.error("حدث خطأ أثناء معالجة الطلب.")
+                    else:
+                        st.error("الرجاء ملء جميع الحقول المطلوبة.")
+
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ----------------- تسجيل ودخول الأستاذ -----------------
@@ -391,7 +455,6 @@ elif st.session_state.user_role == "أستاذ":
         "🔴 البث المباشر داخل المنصة"
     ])
     
-    # 1. إعدادات السعر والجدول
     with tab_ctrl1:
         with st.form("update_teacher_info"):
             new_price = st.number_input("تحديد سعر الاشتراك الشهري (بالجنيه):", value=float(t_price))
@@ -408,7 +471,6 @@ elif st.session_state.user_role == "أستاذ":
                 except:
                     st.error("حدث خطأ أثناء التحديث.")
 
-    # 2. جدول المواعيد والامتحانات
     with tab_ctrl2:
         st.markdown("### 📝 إضافة امتحان أو اختبار للطلاب")
         with st.form("add_exam_form", clear_on_submit=True):
@@ -430,7 +492,6 @@ elif st.session_state.user_role == "أستاذ":
                 except:
                     st.error("حدث خطأ أثناء إضافة السؤال.")
 
-    # 3. إدارة الفيديوهات والمحتوى المدفوع والترويجي
     with tab_ctrl3:
         st.markdown("### 🎬 رفع فيديو أو شرح جديد")
         with st.form("upload_post_form", clear_on_submit=True):
@@ -455,7 +516,6 @@ elif st.session_state.user_role == "أستاذ":
                 except:
                     st.error("حدث خطأ أثناء النشر.")
 
-    # 4. قبول الاشتراكات
     with tab_ctrl4:
         st.markdown("### 💳 طلبات اشتراكات الطلاب المعلقة")
         try:
@@ -494,12 +554,9 @@ elif st.session_state.user_role == "أستاذ":
         except:
             pass
 
-    # 5. البث المباشر داخل المنصة (من كاميرا الأستاذ مباشرة بدون روابط خارجية)
     with tab_ctrl5:
         st.markdown("### 🔴 بث مباشر حصري للمشتركين فقط داخل المنصة")
         st.write("استخدم أداة التقاط الكاميرا أدناه لبدء البث المباشر بالصوت والصورة لطلابك المشتركين حصرياً:")
-        
-        # استخدام كاميرا الجهاز مباشرة لتكون البث الحي داخل التطبيق بدون روابط خارجية
         live_camera_input = st.camera_input("تشغيل كاميرا البث المباشر للأستاذ:")
         if live_camera_input:
             st.success("🟢 الكاميرا والمايك يعملان بنجاح، البث مباشر الآن للمشتركين في غرفتك الخاصة!")
@@ -520,7 +577,6 @@ elif st.session_state.user_role == "طالب":
         logout_user()
         st.rerun()
 
-    # إذا لم يدخل غرفة أستاذ بعد، يعرض له قائمة الأساتذة
     if not st.session_state.inside_teacher_room:
         st.subheader("👨‍🏫 أساتذة المنصة المتاحين")
         try:
@@ -546,7 +602,6 @@ elif st.session_state.user_role == "طالب":
             pass
             
     else:
-        # الطالب داخل غرفة الأستاذ المحدد
         target_t_phone = st.session_state.sub_target_teacher
         if st.button("⬅️ العودة لقائمة الأساتذة"):
             st.session_state.inside_teacher_room = False
@@ -564,7 +619,6 @@ elif st.session_state.user_role == "طالب":
         t_name, t_sub, t_price, t_schedule = t_info
         st.subheader(f"📚 غرفة الأستاذ: {t_name} ({t_sub})")
         
-        # التحقق من حالة اشتراك الطالب مع هذا الأستاذ
         is_active_subscriber = False
         try:
             with sqlite3.connect(DB_NAME) as conn:
@@ -576,10 +630,9 @@ elif st.session_state.user_role == "طالب":
         except:
             pass
             
-        # إذا لم يكن مشتركاً، يظهر له زر الاشتراك والدفع عبر أورانج كاش والمحتوى الترويجي العام فقط
         if not is_active_subscriber:
             st.markdown(f"<div class='app-card'>", unsafe_allow_html=True)
-            st.warning(, f"⚠️ أنت غير مشترك في محتوى هذا الأستاذ المدفوع. سعر الاشتراك الشهري: **{t_price} جنيه**. يرجى التحويل عبر أورانج كاش وإرسال رقم المحول لتفعيل الاشتراك.")
+            st.warning(f"⚠️ أنت غير مشترك في محتوى هذا الأستاذ المدفوع. سعر الاشتراك الشهري: **{t_price} جنيه**. يرجى التحويل عبر أورانج كاش وإرسال رقم المحول لتفعيل الاشتراك.")
             
             with st.form("subscribe_form"):
                 orange_sender_phone = st.text_input("أدخل رقم محمول أورانج كاش الذي قمت بالتحويل منه:")
@@ -616,7 +669,6 @@ elif st.session_state.user_role == "طالب":
                 pass
                 
         else:
-            # الطالب مشترك بالفعل ويحق له رؤية جدول المواعيد، الفيديوهات المدفوعة، البث المباشر، والامتحانات
             st.success("🎉 أنت مشترك رسمي في هذه الغرفة وتستمتع بكافة الصلاحيات!")
             
             tab_st1, tab_st2, tab_st3, tab_st4, tab_st5 = st.tabs([
@@ -627,12 +679,10 @@ elif st.session_state.user_role == "طالب":
                 "💬 الشات الخاص مع الأستاذ"
             ])
             
-            # 1. الجدول
             with tab_st1:
                 st.markdown("### 📅 جدول مواعيد الحصص:")
                 st.info(t_schedule)
                 
-            # 2. الفيديوهات المدفوعة
             with tab_st2:
                 st.markdown("### 🎬 دروس وشروحات الأستاذ المدفوعة:")
                 try:
@@ -648,7 +698,6 @@ elif st.session_state.user_role == "طالب":
                             else:
                                 st.warning("ملف الفيديو غير موجود.")
                             
-                            # قسم التعليقات تحت الفيديو
                             with st.expander("💬 مناقشة الدرس والتعليقات"):
                                 with sqlite3.connect(DB_NAME) as conn:
                                     c = conn.cursor()
@@ -677,13 +726,10 @@ elif st.session_state.user_role == "طالب":
                 except:
                     pass
 
-            # 3. البث المباشر (للمشتركين فقط داخل المنصة)
             with tab_st3:
                 st.markdown("### 🔴 غرفة البث المباشر الحصري للمشتركين")
                 st.info("تتم متابعة البث الحي للكاميرا الخاصة بالأستاذ هنا مباشرة داخل المنصة للمشتركين فقط.")
-                # عرض توجيهي بأن البث متاح طالما الأستاذ فاتح الكاميرا من لوحته
 
-            # 4. الامتحانات
             with tab_st4:
                 st.markdown("### 📝 امتحانات واختبارات الغرفة")
                 try:
@@ -709,7 +755,6 @@ elif st.session_state.user_role == "طالب":
                 except:
                     pass
 
-            # 5. الشات الخاص مع الأستاذ
             with tab_st5:
                 st_autorefresh(interval=2000, key="student_smart_chat_refresh")
                 st.markdown("### 💬 الشات الخاص المباشر مع الأستاذ")
