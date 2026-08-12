@@ -68,27 +68,15 @@ st.markdown("""
     }
     
     .cash-box {
-        background: #ecfdf5 !important;
-        color: #065f46 !important;
+        background: #fff7ed !important;
+        color: #9a3412 !important;
         padding: 14px !important;
         border-radius: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
         font-size: 15px !important;
         margin: 12px 0 !important;
-        border: 1px solid #10b981 !important;
-    }
-    
-    .ad-banner {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
-        border: 2px dashed #f59e0b !important;
-        color: #92400e !important;
-        padding: 15px !important;
-        border-radius: 16px !important;
-        text-align: center !important;
-        font-weight: bold !important;
-        margin: 15px 0 !important;
-        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+        border: 1px solid #fdba74 !important;
     }
     
     .top-complaint-box {
@@ -127,7 +115,7 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'pending', show_ads INTEGER DEFAULT 1, postal_visa_info TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
@@ -188,13 +176,6 @@ def logout_user():
     st.session_state.user_phone = ""
     st.session_state.user_role = None
     st.query_params.clear()
-
-def render_ad_banner():
-    st.markdown("""
-    <div class="ad-banner">
-        📢 إعلان ممول: احصل على أفضل كورسات البرمجة والذكاء الاصطناعي مع خصومات خاصة لمنصة نوفا! (مكان إعلاني مخصص لأرباحك)
-    </div>
-    """, unsafe_allow_html=True)
 
 # ==========================================
 # 4. الشات الذكي بين الأستاذ والطالب
@@ -273,11 +254,8 @@ def render_student_exams(teacher_phone):
 # 6. عرض المحتوى والتحكم
 # ==========================================
 @st.fragment
-def display_student_media(teacher_phone, student_phone, show_ads):
+def display_student_media(teacher_phone, student_phone):
     st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}")
-    
-    if show_ads:
-        render_ad_banner()
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -345,38 +323,30 @@ def display_teacher_requests(teacher_phone):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT student_phone, status, show_ads, postal_visa_info, requested_at, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
                 now = datetime.datetime.now()
-                for s_ph, status, current_ads_setting, postal_info, req_at, expires_at in subs:
-                    c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
+                for s_ph, status, orange_sender, req_at, expires_at in subs:
+                    c.execute("SELECT name FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
                     st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | حالة الاشتراك: **{status}**")
-                    st.markdown(f"💳 **بيانات فيزا البريد المصري للطالب (للتحويل عليها):** `{postal_info or 'غير متوفرة'}`")
+                    st.markdown(f"💳 **رقم أورانج كاش المحول منه من الطالب:** `{orange_sender or 'غير متوفر'}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
-                        ads_option = st.radio(
-                            "نظام الإعلانات لهذا الطالب المشترك:", 
-                            ["إظهار الإعلانات للطالب (مع إعلانات)", "إخفاء الإعلانات نهائياً (بدون إعلانات - مشترك مميز)"],
-                            index=0 if current_ads_setting == 1 else 1,
-                            key=f"ads_rad_{s_ph}"
-                        )
-                        
                         col_act1, col_act2 = st.columns(2)
-                        acc_btn = col_act1.form_submit_button("✅ قبول / تحديث الاشتراك")
+                        acc_btn = col_act1.form_submit_button("✅ قبول وتفعيل الاشتراك")
                         ref_btn = col_act2.form_submit_button("❌ حذف / رفض")
                         
                         if acc_btn:
-                            new_ads_val = 1 if "مع إعلانات" in ads_option else 0
                             exp_time = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-                            c.execute("UPDATE subscriptions SET status='active', show_ads=?, expires_at=? WHERE student_phone=? AND teacher_phone=?", 
-                                      (new_ads_val, exp_time, s_ph, teacher_phone))
+                            c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", 
+                                      (exp_time, s_ph, teacher_phone))
                             conn.commit()
-                            st.success("تم تحديث حالة اشتراك الطالب ونظام الإعلانات بنجاح!")
+                            st.success("تم تفعيل اشتراك الطالب بنجاح!")
                             st.rerun()
                             
                         if ref_btn:
@@ -404,15 +374,14 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT status, show_ads, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+            c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                       (student_phone, t_phone))
             sub_info = c.fetchone()
     except:
         pass
 
     sub_status = sub_info[0] if sub_info else None
-    show_ads_setting = sub_info[1] if sub_info and len(sub_info) > 1 else 1
-    expires_at = sub_info[2] if sub_info and len(sub_info) > 2 else None
+    expires_at = sub_info[1] if sub_info and len(sub_info) > 1 else None
 
     is_expired = False
     if expires_at and sub_status == 'active':
@@ -424,10 +393,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             pass
 
     if sub_status == 'active' and not is_expired:
-        if show_ads_setting == 1:
-            st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان - تظهر إعلانات حسب رغبة الأستاذ)")
-        else:
-            st.success("⭐ أنت مشترك مميز مع هذا الأستاذ (البث والمحتوى متاحان - بدون إعلانات نهائياً!)")
+        st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
         
         if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone}"):
             with sqlite3.connect(DB_NAME) as conn:
@@ -438,8 +404,6 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
 
         tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
         with tab_live:
-            if show_ads_setting == 1:
-                render_ad_banner()
             stream_html = f"""
             <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
                     style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
@@ -449,7 +413,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             components.html(stream_html, height=320)
             
         with tab_media:
-            display_student_media(t_phone, student_phone, show_ads=(show_ads_setting == 1))
+            display_student_media(t_phone, student_phone)
             
         with tab_exams:
             render_student_exams(t_phone)
@@ -458,35 +422,34 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             render_smart_chat(t_phone, student_phone, "طالب")
             
     else:
-        st.info("⚠️ غير مشترك. يرجى إدخال بيانات فيزا البريد المصري الخاصة بك لإرسال طلب الاشتراك:")
-        render_ad_banner()
+        st.info("⚠️ غير مشترك مع هذا الأستاذ. قم بالتحويل واكتب رقم أورانج كاش الخاص بك أدناه:")
         
         st.markdown(f"""
         <div class="cash-box">
-            قيمة الاشتراك ({t_price} جـ). يرجى إدخال تفاصيل فيزا البريد المصري (رقم الكارت أو الحساب) ليتمكن الأستاذ من مراجعة التحويل:
+            يرجى تحويل مبلغ ({t_price} جـ) على رقم أورانج كاش الخاص بالأستاذ، ثم اكتب رقم أورانج كاش الذي حوّلت منه ليرسله للأستاذ:
         </div>
         """, unsafe_allow_html=True)
         
-        with st.form(f"postal_pay_form_{t_phone}"):
-            postal_info_input = st.text_input("أدخل رقم فيزا البريد المصري أو بيانات الحساب المحول منه:")
-            pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ")
+        with st.form(f"orange_pay_form_{t_phone}"):
+            orange_sender_input = st.text_input("اكتب رقم أورانج كاش الذي حوّلت منه:")
+            pay_btn = st.form_submit_button("اشتراك (إرسال رقم التحويل للأستاذ)")
             
             if pay_btn:
-                if postal_info_input:
+                if orange_sender_input:
                     t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
                             c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
-                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, show_ads, postal_visa_info, requested_at) VALUES (?, ?, 'pending', 1, ?, ?)",
-                                      (student_phone, t_phone, postal_info_input, t_now_str))
+                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) VALUES (?, ?, 'pending', ?, ?)",
+                                      (student_phone, t_phone, orange_sender_input, t_now_str))
                             conn.commit()
-                        st.success("تم إرسال طلب الاشتراك وبيانات فيزا البريد بنجاح! في انتظار موافقة الأستاذ.")
+                        st.success("تم إرسال طلب الاشتراك ورقم أورانج كاش للأستاذ بنجاح! في انتظار التفعيل.")
                         st.rerun()
                     except:
                         pass
                 else:
-                    st.error("الرجاء إدخال بيانات فيزا البريد المصري بشكل صحيح!")
+                    st.error("الرجاء إدخال رقم أورانج كاش المحول منه!")
                     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -778,11 +741,10 @@ else:
         st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
         
         tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
-            "🔴 البث", "👥 الطلبات والتحكم بالإعلانات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
+            "🔴 البث", "👥 الطلبات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
         ])
 
         with tab_broadcast:
-            render_ad_banner()
             st.markdown("### إدارة البث المباشر والشات العام")
             stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&autostart=1" 
