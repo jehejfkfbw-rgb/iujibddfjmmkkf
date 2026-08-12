@@ -260,9 +260,9 @@ def display_student_media(teacher_phone, student_phone):
         
         if posts:
             for p_id, p_title, p_type, p_path, views in posts:
-                st.markdown(f"📌 **{p_title}** | 👁️ المشاهدات: **{views}**")
+                display_views = max(25, views + 25)
+                st.markdown(f"📌 **{p_title}** | 👁️ المشاهدات: **{display_views}**")
                 
-                # تحديث المشاهدات مرة واحدة عند العرض
                 try:
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
@@ -762,7 +762,6 @@ else:
 
                 if up_btn:
                     if p_title and uploaded_file is not None:
-                        # حفظ الملف بشكل آمن في مجلد الـ media
                         file_extension = os.path.splitext(uploaded_file.name)[1]
                         unique_filename = f"{t_phone}_{int(datetime.datetime.now().timestamp())}{file_extension}"
                         file_path = os.path.join(MEDIA_DIR, unique_filename)
@@ -793,7 +792,8 @@ else:
                 
                 if my_posts:
                     for mp_id, mp_title, mp_type, mp_path, mp_views in my_posts:
-                        st.markdown(f"📌 **{mp_title}** | المشاهدات: {mp_views}")
+                        display_mp_views = max(25, mp_views + 25)
+                        st.markdown(f"📌 **{mp_title}** | المشاهدات: {display_mp_views}")
                         if mp_path and os.path.exists(mp_path):
                             if mp_type == "image":
                                 st.image(mp_path, width=200)
@@ -991,7 +991,8 @@ else:
                 
                 if all_posts:
                     for p_id, p_tph, p_title, p_type, p_path, p_views in all_posts:
-                        st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | المشاهدات: {p_views}")
+                        display_p_views = max(25, p_views + 25)
+                        st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | المشاهدات: {display_p_views}")
                         if p_path and os.path.exists(p_path):
                             if p_type == "image":
                                 st.image(p_path, width=200)
