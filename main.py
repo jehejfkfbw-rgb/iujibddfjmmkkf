@@ -148,7 +148,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_phone TEXT UNIQUE,
             title TEXT,
-            media_url TEXT,
+            file_path TEXT,
             is_active INTEGER DEFAULT 0,
             countdown_hours INTEGER DEFAULT 0,
             started_at TEXT)''')
@@ -261,7 +261,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. وحدات النظام (شات، بث مباشر داخلي، امتحانات)
+# 4. وحدات النظام الداخلية البحتة
 # ==========================================
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
@@ -303,19 +303,19 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
 @st.fragment
 def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher_owner=False):
     st_autorefresh(interval=3000, key=f"live_broadcast_ref_{teacher_phone}")
-    st.subheader("📡 البث المباشر داخل المنصة")
+    st.subheader("📡 البث المباشر داخل التطبيق حصرياً")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT title, media_url, is_active, countdown_hours, started_at FROM live_broadcasts WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT title, file_path, is_active, countdown_hours, started_at FROM live_broadcasts WHERE teacher_phone=?", (teacher_phone,))
             b_row = c.fetchone()
             
         if b_row and b_row[2] == 1:
-            title, m_url, active_status, countdown_h, started_str = b_row
+            title, f_path, active_status, countdown_h, started_str = b_row
             
             if is_subscriber or is_teacher_owner:
-                st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً: {title}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً داخل المنصة: {title}</div>", unsafe_allow_html=True)
                 
                 if countdown_h > 0 and started_str:
                     try:
@@ -334,18 +334,13 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     except:
                         pass
 
-                # تشغيل البث المباشر المباشر داخل التطبيق (سواء فيديو مسجل مباشر، رابط كاميرا، أو ملف فيديو مرفوع كمحاضرة بث)
-                if m_url:
-                    if "http" in m_url:
-                        st.video(m_url)
-                    elif os.path.exists(m_url):
-                        st.video(m_url)
-                    else:
-                        st.info(f"بث مباشر نشط: {m_url}")
+                # التشغيل الداخلي الصرف من ملف البث المرفع داخل التطبيق
+                if f_path and os.path.exists(f_path):
+                    st.video(f_path)
                 else:
-                    st.info("الأستاذ يبث الآن بدون رابط مرئي إضافي.")
+                    st.info("غرفة البث المباشر مفعلة بانتظار رفع ملف البث أو تشغيله من قِبل الأستاذ.")
             else:
-                st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط**. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط** داخل المنصة. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
             st.info("لا يوجد بث مباشر نشط حالياً من هذا الأستاذ.")
     except:
@@ -548,7 +543,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر الداخلي</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر الداخلي الصرف</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -938,21 +933,19 @@ else:
                     except:
                         pass
         with tab_live_ctrl:
-            st.markdown("### إدارة وبث المحاضرة الحية من داخل التطبيق")
-            st.markdown("يمكنك رفع فيديو بث مباشر مسجل، أو ربط رابط فيديو مباشر، أو تفعيل غرفة البث الفوري ليراها الطلاب حصرياً من داخل التطبيق مباشرة.")
+            st.markdown("### إدارة البث المباشر (داخلي بالكامل)")
+            st.markdown("قم برفع فيديو البث المباشر من جهازك مباشرة ليتم تشغيله حصرياً للطلاب المشتركين من داخل التطبيق دون أي روابط خارجية.")
             
-            # معاينة البث المباشر الخاص بالأستاذ في لوحة التحكم
             render_live_broadcast_section(t_phone, is_subscriber=True, is_teacher_owner=True)
             
             with st.form("live_ctrl_form"):
                 live_title = st.text_input("عنوان البث المباشر:")
-                live_url = st.text_input("رابط بث مباشر (رابط فيديو أو ملف مباشر):")
-                live_file_upload = st.file_uploader("أو رفع فيديو البث المباشر مباشرة من جهازك:", type=["mp4", "mkv", "avi"])
-                countdown_hrs = st.number_input("مدة العد التنازلي لإغلاق الغرفة (بالساعات):", min_value=0, value=3)
-                is_live_on = st.checkbox("تشغيل البث المباشر الآن للطلاب المشتركين")
+                live_file_upload = st.file_uploader("رفع فيديو البث المباشر:", type=["mp4", "mkv", "avi"])
+                countdown_hrs = st.number_input("مدة العد التنازلي لإغلاق البث (بالساعات):", min_value=0, value=3)
+                is_live_on = st.checkbox("تشغيل البث المباشر الآن للطلاب")
                 
                 if st.form_submit_button("بدء وبث المحاضرة داخل التطبيق"):
-                    final_media_path = live_url
+                    final_media_path = ""
                     if live_file_upload:
                         final_media_path = os.path.join(MEDIA_DIR, live_file_upload.name)
                         with open(final_media_path, "wb") as f:
@@ -963,12 +956,12 @@ else:
                     try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
-                            c.execute("""INSERT INTO live_broadcasts (teacher_phone, title, media_url, is_active, countdown_hours, started_at) 
+                            c.execute("""INSERT INTO live_broadcasts (teacher_phone, title, file_path, is_active, countdown_hours, started_at) 
                                        VALUES (?, ?, ?, ?, ?, ?)
-                                       ON CONFLICT(teacher_phone) DO UPDATE SET title=?, media_url=?, is_active=?, countdown_hours=?, started_at=?""",
+                                       ON CONFLICT(teacher_phone) DO UPDATE SET title=?, file_path=?, is_active=?, countdown_hours=?, started_at=?""",
                                       (t_phone, live_title, final_media_path, active_val, countdown_hrs, t_now, live_title, final_media_path, active_val, countdown_hrs, t_now))
                             conn.commit()
-                        st.success("تم تشغيل وبث المحاضرة بنجاح داخل التطبيق!")
+                        st.success("تم تشغيل البث المباشر بنجاح داخل التطبيق!")
                         st.rerun()
                     except:
                         pass
@@ -1140,7 +1133,7 @@ else:
                 pass
         with dev_tab4:
             try:
-                with sqlite3.connect(DB_Name) as conn:
+                with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
                     c.execute("SELECT COUNT(*) FROM users WHERE role='طالب'")
                     ts = c.fetchone()[0]
