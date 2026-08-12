@@ -25,7 +25,7 @@ st.markdown("""
     header[data-testid="stHeader"] {display: none !important;}
     
     .block-container {
-        max-width: 700px !important;
+        max-width: 750px !important;
         padding-top: 1.5rem !important;
         padding-bottom: 3rem !important;
         padding-left: 1rem !important;
@@ -164,6 +164,16 @@ def init_db():
             countdown_hours INTEGER DEFAULT 0,
             started_at TEXT)''')
 
+        # جدول خاص بطلبات الانضمام للمكالمة الحية (المقاليد/الكاميرا الجماعية)
+        c.execute('''CREATE TABLE IF NOT EXISTS call_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            teacher_phone TEXT,
+            student_phone TEXT,
+            student_name TEXT,
+            status TEXT DEFAULT 'pending',
+            timestamp TEXT,
+            UNIQUE(teacher_phone, student_phone))''')
+
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, 
             teacher_phone TEXT, 
@@ -277,11 +287,11 @@ def logout_user():
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
     st_autorefresh(interval=2500, key=f"smart_chat_ref_{teacher_phone}_{student_phone}")
-    st.markdown("💬 **الشات الخاص الفوري:**")
+    st.markdown("💬 **الشات الخاص الفوري مع الأستاذ:**")
     
     with st.form(f"smart_chat_form_{teacher_phone}_{student_phone}", clear_on_submit=True):
-        msg = st.text_input("اكتب رسالتك هنا...")
-        send_btn = st.form_submit_button("إرسال")
+        msg = st.text_input("اكتب رسالتك للأستاذ هنا...")
+        send_btn = st.form_submit_button("إرسال الرسالة")
         if send_btn and msg:
             t_now = datetime.datetime.now().strftime("%H:%M - %Y/%m/%d")
             sender_role = "أستاذ" if current_user_role == "أستاذ" else "طالب"
@@ -307,16 +317,16 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
                 bg_color = "#e0e7ff" if s_role == "أستاذ" else "#f3f4f6"
                 st.markdown(f"<div style='background: {bg_color}; color: #000; padding: 10px; border-radius: 4px; margin-bottom: 6px; border: 1px solid #d1d5db;'><small style='color: #4b5563;'>[{s_time}] <b>{s_role}:</b></small><br>{s_msg}</div>", unsafe_allow_html=True)
         else:
-            st.info("لا توجد رسائل سابقة.")
+            st.info("لا توجد رسائل سابقة في الشات.")
     except:
         pass
 
 @st.fragment
-def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher_owner=False):
-    st_autorefresh(interval=2500, key=f"live_broadcast_ref_{teacher_phone}")
+def render_live_broadcast_section(teacher_phone, student_phone=None, is_subscriber=False, is_teacher_owner=False):
+    st_autorefresh(interval=2500, key=f"live_broadcast_ref_{teacher_phone}_{student_phone}")
     
     if is_teacher_owner:
-        st.subheader("📡 إدارة الكاميرا والبث المباشر (من كاميرا الجهاز)")
+        st.subheader("📡 إعدادات مكالمة البث المباشر (كاميرا الأستاذ)")
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
@@ -332,12 +342,12 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
 
         with st.form("teacher_live_settings_form_inside_room"):
             live_title_input = st.text_input("عنوان الحصة أو البث:", value=cur_b_title)
-            live_active_toggle = st.selectbox("حالة الكاميرا وبث الدرس:", ["إيقاف الكاميرا وبث الفيديو", "تشغيل الكاميرا وبث الفيديو"], index=1 if cur_b_active==1 else 0)
+            live_active_toggle = st.selectbox("حالة البث:", ["إيقاف البث", "تشغيل البث"], index=1 if cur_b_active==1 else 0)
             live_vis_input = st.selectbox("صلاحية المشاهدة:", ["subscriber (للمشتركين فقط)", "public (للجميع)"], index=0 if cur_b_vis=="subscriber" else 1)
-            live_countdown_input = st.number_input("مدة العد التنازلي لإغلاق البث بالساعات (0 لتعطيل العد):", min_value=0, value=int(cur_b_cd))
+            live_countdown_input = st.number_input("مدة العد التنازلي لإغلاق البث بالساعات:", min_value=0, value=int(cur_b_cd))
             
             if st.form_submit_button("حفظ إعدادات البث"):
-                new_active_val = 1 if live_active_toggle == "تشغيل الكاميرا وبث الفيديو" else 0
+                new_active_val = 1 if live_active_toggle == "تشغيل البث" else 0
                 new_vis_val = "subscriber" if "للمشتركين" in live_vis_input else "public"
                 t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 try:
@@ -351,6 +361,37 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     st.rerun()
                 except:
                     pass
+        st.write("---")
+
+        # لوحة تحكم الأستاذ للقبول في المكالمة الجماعية
+        st.markdown("### 📞 طلبات انضمام الطلاب للمكالمة الحية (كاميرا مشتركة):")
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT id, student_phone, student_name, status FROM call_requests WHERE teacher_phone=?", (teacher_phone,))
+                call_reqs = c.fetchall()
+            
+            if call_reqs:
+                for req_id, s_ph, s_name, req_status in call_reqs:
+                    st.markdown(f"🎓 طالب يريد الانضمام للمكالمة: **{s_name}** (`{s_ph}`) | الحالة الحالية: **{req_status}**")
+                    col_a, col_b = st.columns(2)
+                    if col_a.button(f"✅ قبول انضمام {s_name}", key=f"accept_call_{req_id}"):
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("UPDATE call_requests SET status='accepted' WHERE id=?", (req_id,))
+                            conn.commit()
+                        st.success(f"تم قبول الطالب {s_name} في المكالمة!")
+                        st.rerun()
+                    if col_b.button(f"❌ طرد/رفض", key=f"reject_call_{req_id}"):
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM call_requests WHERE id=?", (req_id,))
+                            conn.commit()
+                        st.rerun()
+            else:
+                st.info("لا توجد طلبات انضمام للمكالمة حالياً.")
+        except:
+            pass
         st.write("---")
 
     try:
@@ -370,68 +411,113 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     can_watch = True
 
             if can_watch or is_teacher_owner:
-                st.markdown(f"<div class='success-badge'>🔴 بث كاميرا مباشر نشط حالياً: {title}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='success-badge'>🔴 بث مكالمة حي نشط حالياً: {title}</div>", unsafe_allow_html=True)
                 
-                if countdown_h > 0 and started_str:
-                    try:
-                        start_dt = datetime.datetime.strptime(started_str, "%Y-%m-%d %H:%M:%S")
-                        exp_time_dt = start_dt + datetime.timedelta(hours=countdown_h)
-                        now_dt = datetime.datetime.now()
-                        diff_sec = (exp_time_dt - now_dt).total_seconds()
-                        
-                        if diff_sec > 0:
-                            hrs_left = int(diff_sec // 3600)
-                            mins_left = int((diff_sec % 3600) // 60)
-                            st.warning(f"⏳ العد التنازلي لإغلاق البث: **{hrs_left} ساعة و {mins_left} دقيقة**.")
-                        else:
-                            st.error("⚠️ انتهى الوقت المخصص للبث المباشر.")
-                            return
-                    except:
-                        pass
-
-                # تشغيل كاميرا الجهاز مباشرة (للأستاذ للبث، أو للطالب للمشاهدة الحية من كاميرا الأستاذ عبر المتصفح)
+                # عرض كاميرا الأستاذ الأساسية
                 if is_teacher_owner:
-                    st.markdown("### 📷 شاشة الكاميرا الخاصة بك (بث مباشر من جهازك):")
-                    # استخدام HTML5 video و MediaDevices لتشغيل الكاميرا من جهاز الأستاذ مباشرة
+                    st.markdown("### 🎥 كاميرا الأستاذ (البث الرئيسي):")
                     st.components.v1.html("""
                         <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
-                            <video id="teacherCam" autoplay playsinline muted style="width: 100%; max-height: 400px; border-radius: 6px;"></video>
-                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">🟢 الكاميرا تعمل وتبث مباشر الآن من جهازك</p>
+                            <video id="teacherCam" autoplay playsinline muted style="width: 100%; max-height: 350px; border-radius: 6px;"></video>
+                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">🟢 كاميرتك تبث الآن للطلاب</p>
                         </div>
                         <script>
                             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                                 .then(stream => {
-                                    const video = document.getElementById('teacherCam');
-                                    video.srcObject = stream;
+                                    document.getElementById('teacherCam').srcObject = stream;
                                 })
                                 .catch(err => {
-                                    alert("يرجى السماح للمتصفح بالوصول إلى الكاميرا والصوت من إعدادات المتصفح.");
+                                    console.log("خطأ في تشغيل الكاميرا");
                                 });
                         </script>
-                    """, height=450)
+                    """, height=380)
                 else:
-                    st.markdown("### 🎥 شاشة مشاهدة البث الحي (من كاميرا الأستاذ):")
+                    # طالب يتابع البث
+                    st.markdown("### 🎥 شاشة البث المباشر (مع الأستاذ):")
                     st.components.v1.html("""
                         <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
-                            <video id="studentCamView" autoplay playsinline controls style="width: 100%; max-height: 400px; border-radius: 6px;"></video>
-                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">📡 جارِ استقبال البث الحي من الأستاذ...</p>
+                            <video id="studentView" autoplay playsinline controls style="width: 100%; max-height: 350px; border-radius: 6px;"></video>
+                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">📡 جارِ استقبال البث...</p>
                         </div>
                         <script>
-                            // استقبال دفق الكاميرا المباشر للطالب
                             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                                 .then(stream => {
-                                    const video = document.getElementById('studentCamView');
-                                    video.srcObject = stream;
+                                    document.getElementById('studentView').srcObject = stream;
                                 })
-                                .catch(err => {
-                                    console.log("الكاميرا في وضع الاستقبال");
-                                });
+                                .catch(err => {});
                         </script>
-                    """, height=450)
+                    """, height=380)
+
+                    # نظام طلب الانضمام للمكالمة الجماعية للطالب
+                    if student_phone:
+                        st.write("---")
+                        # فحص حالة طلب الطالب
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn:
+                                c = conn.cursor()
+                                c.execute("SELECT status FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                                call_st_row = c.fetchone()
+                                call_status = call_st_row[0] if call_st_row else None
+                        except:
+                            call_status = None
+
+                        if call_status == "accepted":
+                            st.markdown("<div class='success-badge'>🎉 تم قبولك في المكالمة! كاميرتك وصوتك مفعلان الآن مع الأستاذ.</div>", unsafe_allow_html=True)
+                            st.components.v1.html("""
+                                <div style="text-align: center; background: #111; padding: 10px; border-radius: 8px; border: 2px solid #10b981;">
+                                    <p style="color: #10b981; font-weight: bold;">كاميرتك الشخصية داخل المكالمة الجماعية:</p>
+                                    <video id="myCallCam" autoplay playsinline muted style="width: 100%; max-height: 250px; border-radius: 6px;"></video>
+                                </div>
+                                <script>
+                                    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                                        .then(stream => {
+                                            document.getElementById('myCallCam').srcObject = stream;
+                                        });
+                                </script>
+                            """, height=290)
+                            
+                            if st.button("🚪 مغادرة المكالمة الجماعية"):
+                                try:
+                                    with sqlite3.connect(DB_NAME) as conn:
+                                        c = conn.cursor()
+                                        c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                                        conn.commit()
+                                    st.rerun()
+                                except:
+                                    pass
+
+                        elif call_status == "pending":
+                            st.warning("⏳ طلب انضمامك للمكالمة قيد الانتظار، في انتظار موافقة الأستاذ...")
+                            if st.button("إلغاء طلب الانضمام"):
+                                try:
+                                    with sqlite3.connect(DB_NAME) as conn:
+                                        c = conn.cursor()
+                                        c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                                        conn.commit()
+                                    st.rerun()
+                                except:
+                                    pass
+                        else:
+                            if st.button("🙋‍♂️ طلب انضمام للبث المباشر (فتح الكاميرا والمكالمة مع الأستاذ)"):
+                                try:
+                                    with sqlite3.connect(DB_NAME) as conn:
+                                        c = conn.cursor()
+                                        c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
+                                        s_n_row = c.fetchone()
+                                        s_real_name = s_n_row[0] if s_n_row else "طالب"
+                                        
+                                        t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        c.execute("INSERT OR REPLACE INTO call_requests (teacher_phone, student_phone, student_name, status, timestamp) VALUES (?, ?, ?, 'pending', ?)",
+                                                  (teacher_phone, student_phone, s_real_name, t_now))
+                                        conn.commit()
+                                    st.success("تم إرسال طلب الانضمام للأستاذ بنجاح!")
+                                    st.rerun()
+                                except:
+                                    pass
             else:
-                st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل غرفة الأستاذ. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل غرفة الأستاذ.</div>", unsafe_allow_html=True)
         else:
-            st.info("لا يوجد بث مباشر نشط من الكاميرا حالياً داخل هذه الغرفة.")
+            st.info("لا يوجد بث مباشر نشط حالياً من الأستاذ.")
     except:
         pass
 
@@ -632,7 +718,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والمكالمات الجماعية الحية</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -907,10 +993,10 @@ else:
 
             st.markdown(f"## 🏫 غرفة الأستاذ: {t_room_name}")
 
-            tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 البث الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
+            tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 مكالمة البث الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
 
             with tab_live:
-                render_live_broadcast_section(t_ph_room, is_subscriber=True, is_teacher_owner=False)
+                render_live_broadcast_section(t_ph_room, student_phone=current_phone, is_subscriber=True, is_teacher_owner=False)
 
             with tab_posts:
                 display_student_media(t_ph_room, current_phone, is_subscriber=True)
@@ -956,7 +1042,7 @@ else:
 
         st.write("---")
         
-        if st.button("🚀 الدخول إلى غرفة البث والكاميرا الحية الخاصة بي"):
+        if st.button("🚀 الدخول إلى غرفة مكالمة البث الجماعي والكاميرات الخاصة بي"):
             st.session_state.sub_target_teacher = current_phone
             st.session_state.inside_teacher_room = True
             st.rerun()
@@ -971,8 +1057,8 @@ else:
                 st.session_state.sub_target_teacher = None
                 st.rerun()
 
-            st.markdown("## 🏫 غرفة البث والكاميرا الحية الخاصة بك (الأستاذ)")
-            render_live_broadcast_section(current_phone, is_subscriber=True, is_teacher_owner=True)
+            st.markdown("## 🏫 غرفة مكالمة البث الجماعي الخاصة بك (الأستاذ)")
+            render_live_broadcast_section(current_phone, student_phone=None, is_subscriber=True, is_teacher_owner=True)
 
         with t_tab2:
             st.markdown("### متابعة وقبول طلاب الاشتراك")
