@@ -88,6 +88,15 @@ st.markdown("""
         text-align: center !important;
         margin: 15px 0 !important;
     }
+    
+    .promo-badge {
+        background: #e0e7ff !important;
+        color: #4338ca !important;
+        padding: 4px 10px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: bold !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -126,7 +135,12 @@ def init_db():
 
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
-            media_type TEXT, file_path TEXT, status TEXT DEFAULT 'approved', views_count INTEGER DEFAULT 0)''')
+            media_type TEXT, file_path TEXT, status TEXT DEFAULT 'approved', views_count INTEGER DEFAULT 0, visibility TEXT DEFAULT 'subscriber')''')
+
+        try:
+            c.execute("ALTER TABLE posts ADD COLUMN visibility TEXT DEFAULT 'subscriber'")
+        except:
+            pass
 
         c.execute('''CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, student_name TEXT, comment_text TEXT, timestamp TEXT)''')
@@ -174,7 +188,6 @@ if "is_logged_in" not in st.session_state:
 if "sub_target_teacher" not in st.session_state:
     st.session_state.sub_target_teacher = None
 
-# متغير لحالة الدخول لقاعة الأستاذ بعد قبول الاشتراك
 if "inside_teacher_room" not in st.session_state:
     st.session_state.inside_teacher_room = False
 
@@ -270,8 +283,8 @@ def render_student_exams(teacher_phone):
 # 6. عرض المحتوى والتحكم
 # ==========================================
 @st.fragment
-def display_student_media(teacher_phone, student_phone):
-    st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}")
+def display_student_media(teacher_phone, student_phone, is_subscriber=True):
+    st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}_{is_subscriber}")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -280,13 +293,22 @@ def display_student_media(teacher_phone, student_phone):
             st_user_row = c.fetchone()
             student_name = st_user_row[0] if st_user_row else "طالب"
 
-            c.execute("SELECT id, title, media_type, file_path, views_count FROM posts WHERE teacher_phone=? AND status='approved' ORDER BY id DESC", (teacher_phone,))
+            if is_subscriber:
+                c.execute("SELECT id, title, media_type, file_path, views_count, visibility FROM posts WHERE teacher_phone=? AND status='approved' ORDER BY id DESC", (teacher_phone,))
+            else:
+                # غير المشتركين يظهر لهم الفيديوهات الترويجية والعامة فقط
+                c.execute("SELECT id, title, media_type, file_path, views_count, visibility FROM posts WHERE teacher_phone=? AND status='approved' AND visibility='public' ORDER BY id DESC", (teacher_phone,))
+            
             posts = c.fetchall()
         
         if posts:
-            for p_id, p_title, p_type, p_path, views in posts:
+            for p_id, p_title, p_type, p_path, views, p_vis in posts:
                 display_views = max(25, views + 25)
-                st.markdown(f"📌 **{p_title}** | 👁️ المشاهدات: **{display_views}**")
+                
+                if p_vis == 'public':
+                    st.markdown(f"🌟 <span class='promo-badge'>فيديو ترويجي عام</span> 📌 **{p_title}** | 👁️ المشاهدات: **{display_views}**", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"📌 **{p_title}** | 👁️ المشاهدات: **{display_views}**", unsafe_allow_html=True)
                 
                 try:
                     with sqlite3.connect(DB_NAME) as conn:
@@ -329,7 +351,10 @@ def display_student_media(teacher_phone, student_phone):
                             st.rerun()
                 st.write("---")
         else:
-            st.info("لا توجد منشورات أو فيديوهات متاحة حالياً من هذا الأستاذ.")
+            if not is_subscriber:
+                st.info("لا توجد فيديوهات ترويجية عامة متاحة حالياً. يمكنك الاشتراك لرؤية محتوى الأستاذ بالكامل!")
+            else:
+                st.info("لا توجد منشورات أو فيديوهات متاحة حالياً من هذا الأستاذ.")
     except:
         pass
 
@@ -654,7 +679,6 @@ else:
                         col_info.markdown(f"### 👨‍🏫 {t_name}")
                         col_info.markdown(f"📖 **المادة:** {t_sub}")
                         
-                        # التحقق من حالة اشتراك الطالب مع هذا الأستاذ لمعرفة ماذا يظهر على الكارت
                         sub_check_status = None
                         try:
                             with sqlite3.connect(DB_NAME) as conn_sub:
@@ -738,7 +762,6 @@ else:
                     pass
 
             if sub_status == 'active' and not is_expired:
-                # إذا كان الطالب لم يضغط بعد على زر الدخول للقاعة، نعرض له زر الدخول المميز ونخفي زر الاشتراك القديم
                 if not st.session_state.inside_teacher_room:
                     st.markdown("""
                     <div class="success-alert">
@@ -750,7 +773,6 @@ else:
                         st.session_state.inside_teacher_room = True
                         st.rerun()
                 else:
-                    # عند الضغط على زر الدخول، تفتح له محتويات القاعة والتبويبات
                     if st.button("❌ إلغاء الاشتراك والخروج من القاعة"):
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
@@ -770,7 +792,7 @@ else:
                         components.html(stream_html, height=320)
                         
                     with tab_media:
-                        display_student_media(t_phone_val, st.session_state.user_phone)
+                        display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=True)
                         
                     with tab_exams:
                         render_student_exams(t_phone_val)
@@ -784,6 +806,12 @@ else:
                     🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار المراجعة والتفعيل.
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # عرض الفيديوهات الترويجية العامة حتى أثناء الانتظار
+                st.write("---")
+                st.markdown("### 🌟 الفيديوهات الترويجية والعامة للأستاذ:")
+                display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
+                
                 if st.button("إلغاء الطلب المعلق"):
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
@@ -791,6 +819,11 @@ else:
                         conn.commit()
                     st.rerun()
             else:
+                # إذا لم يكن مشتركاً، اعرض له الفيديوهات الترويجية العامة أولاً كمعاينة لجذب انتباهه
+                st.markdown("### 🌟 فيديوهات ومعاينة عامة مجانية:")
+                display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
+                st.write("---")
+
                 fixed_orange_number = "01213783090"
                 
                 st.markdown(f"""
@@ -888,7 +921,14 @@ else:
         with tab_upload:
             with st.form("upload_form", clear_on_submit=True):
                 p_title = st.text_input("عنوان الفيديو أو المحتوى:")
-                p_type = st.selectbox("النوع:", ["video", "image"])
+                p_type = st.selectbox("نوع الملف:", ["video", "image"])
+                
+                # الخيار المطلوب: هل الفيديو يظهر للكل (ترويجي) أم للمشتركين فقط؟
+                p_vis_choice = st.selectbox(
+                    "من يمكنه مشاهدة هذا الفيديو؟", 
+                    ["فيديو ترويجي عام (يظهر للجميع ولغير المشتركين 🌟)", "محتوى حصري (للمشتركين فقط 🔒)"]
+                )
+                
                 uploaded_file = st.file_uploader("اختر الملف:", type=["mp4", "mov", "avi", "mkv", "png", "jpg", "jpeg"])
                 up_btn = st.form_submit_button("رفع ونشر الفوري")
 
@@ -898,16 +938,18 @@ else:
                         unique_filename = f"{t_phone}_{int(datetime.datetime.now().timestamp())}{file_extension}"
                         file_path = os.path.join(MEDIA_DIR, unique_filename)
                         
+                        vis_db_val = "public" if "عام" in p_vis_choice else "subscriber"
+                        
                         try:
                             with open(file_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
                             
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
-                                c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
-                                          (t_phone, p_title, p_type, file_path))
+                                c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status, visibility) VALUES (?, ?, ?, ?, 'approved', ?)",
+                                          (t_phone, p_title, p_type, file_path, vis_db_val))
                                 conn.commit()
-                            st.success("✅ تم إنشاء ونشر الفيديو بنجاح وأصبح متاحاً للطلاب المشتركين!")
+                            st.success("✅ تم نشر الفيديو بنجاح بالشكل المخصص!")
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء حفظ الملف: {e}")
                     else:
@@ -918,13 +960,15 @@ else:
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("SELECT id, title, media_type, file_path, views_count FROM posts WHERE teacher_phone=?", (t_phone,))
+                    c.execute("SELECT id, title, media_type, file_path, views_count, visibility FROM posts WHERE teacher_phone=?", (t_phone,))
                     my_posts = c.fetchall()
                 
                 if my_posts:
-                    for mp_id, mp_title, mp_type, mp_path, mp_views in my_posts:
+                    for mp_id, mp_title, mp_type, mp_path, mp_views, mp_vis in my_posts:
                         display_mp_views = max(25, mp_views + 25)
-                        st.markdown(f"📌 **{mp_title}** | المشاهدات: {display_mp_views}")
+                        vis_label = "🌟 عام للكل" if mp_vis == 'public' else "🔒 للمشتركين فقط"
+                        st.markdown(f"📌 **{mp_title}** | النوع: `{vis_label}` | المشاهدات: {display_mp_views}")
+                        
                         if mp_path and os.path.exists(mp_path):
                             if mp_type == "image":
                                 st.image(mp_path, width=200)
@@ -1115,13 +1159,14 @@ else:
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("SELECT id, teacher_phone, title, media_type, file_path, views_count FROM posts")
+                    c.execute("SELECT id, teacher_phone, title, media_type, file_path, views_count, visibility FROM posts")
                     all_posts = c.fetchall()
                 
                 if all_posts:
-                    for p_id, p_tph, p_title, p_type, p_path, p_views in all_posts:
+                    for p_id, p_tph, p_title, p_type, p_path, p_views, p_vis in all_posts:
                         display_p_views = max(25, p_views + 25)
-                        st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | المشاهدات: {display_p_views}")
+                        vis_label = "🌟 عام" if p_vis == 'public' else "🔒 للمشتركين"
+                        st.markdown(f"📌 **{p_title}** | هاتف الأستاذ: `{p_tph}` | النوع: `{vis_label}` | المشاهدات: {display_p_views}")
                         if p_path and os.path.exists(p_path):
                             if p_type == "image":
                                 st.image(p_path, width=200)
