@@ -3,7 +3,6 @@ import sqlite3
 import os
 import streamlit.components.v1 as components
 import hashlib
-import random
 import datetime
 from streamlit_autorefresh import st_autorefresh
 
@@ -164,6 +163,10 @@ if "is_logged_in" not in st.session_state:
         st.session_state.user_phone = ""
         st.session_state.user_role = None
 
+# إدارة الانتقال لشاشة الاشتراك المخصصة للأستاذ
+if "sub_target_teacher" not in st.session_state:
+    st.session_state.sub_target_teacher = None
+
 def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
@@ -175,6 +178,7 @@ def logout_user():
     st.session_state.is_logged_in = False
     st.session_state.user_phone = ""
     st.session_state.user_role = None
+    st.session_state.sub_target_teacher = None
     st.query_params.clear()
 
 # ==========================================
@@ -329,7 +333,7 @@ def display_teacher_requests(teacher_phone):
             if subs:
                 now = datetime.datetime.now()
                 for s_ph, status, orange_sender, req_at, expires_at in subs:
-                    # التحقق التلقائي من انتهاء مدة الـ 30 يوم وإلغاء الاشتراك تلقائياً
+                    # فحص تلقائي لمرور 30 يوماً وإلغاء الاشتراك تلقائياً
                     if status == 'active' and expires_at:
                         try:
                             exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
@@ -371,114 +375,6 @@ def display_teacher_requests(teacher_phone):
                 st.info("لا توجد طلبات اشتراك حالياً.")
     except:
         pass
-
-@st.fragment
-def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, student_phone):
-    st_autorefresh(interval=2000, key=f"student_card_refresh_{t_phone}")
-    
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    
-    # 1. زر الضغط على اسم الأستاذ للتحويل لصفحته أو إظهار تفاصيل الاشتراك في الجنب/الأسفل
-    col_t_info, col_t_btn = st.columns([3, 1])
-    col_t_info.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
-    col_t_info.markdown(f"📖 **المادة:** {t_sub} | 💰 **سعر الاشتراك (30 يوم):** {t_price} جـ")
-    
-    show_subscribe_panel = col_t_btn.button("اشتراك ⚡", key=f"btn_sub_toggle_{t_phone}")
-
-    # التحقق من حالة الاشتراك وتحديث انتهاء الـ 30 يوم تلقائياً للطلاب أيضاً
-    sub_info = None
-    try:
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                      (student_phone, t_phone))
-            sub_info = c.fetchone()
-    except:
-        pass
-
-    sub_status = sub_info[0] if sub_info else None
-    expires_at = sub_info[1] if sub_info and len(sub_info) > 1 else None
-
-    is_expired = False
-    if expires_at and sub_status == 'active':
-        try:
-            exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
-            if datetime.datetime.now() > exp_dt:
-                is_expired = True
-                # إلغاء الاشتراك تلقائياً بعد مرور 30 يوم
-                with sqlite3.connect(DB_NAME) as conn:
-                    c = conn.cursor()
-                    c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
-                    conn.commit()
-                sub_status = None
-        except:
-            pass
-
-    if sub_status == 'active' and not is_expired:
-        st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
-        
-        if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone}"):
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
-                conn.commit()
-            st.rerun()
-
-        tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
-        with tab_live:
-            stream_html = f"""
-            <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
-                    style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
-                    allow="camera; microphone; autoplay" allowfullscreen>
-            </iframe>
-            """
-            components.html(stream_html, height=320)
-            
-        with tab_media:
-            display_student_media(t_phone, student_phone)
-            
-        with tab_exams:
-            render_student_exams(t_phone)
-            
-        with tab_chat:
-            render_smart_chat(t_phone, student_phone, "طالب")
-            
-    else:
-        st.info("⚠️ غير مشترك مع هذا الأستاذ. قم بالتحويل للرقم المخصص واكتب رقم أورانج كاش الخاص بك أدناه:")
-        
-        # الرقم الثابت المحدد من حضرتك: 01213783090
-        fixed_orange_number = "01213783090"
-        
-        st.markdown(f"""
-        <div class="cash-box">
-            يرجى تحويل مبلغ ({t_price} جـ) على رقم أورانج كاش الآتي: <br>
-            <span style="font-size: 20px; color: #4f46e5;">{fixed_orange_number}</span><br>
-            ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه ليرسله للأستاذ:
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.form(f"orange_pay_form_{t_phone}"):
-            orange_sender_input = st.text_input("اكتب رقم أورانج كاش الذي حوّلت منه:")
-            pay_btn = st.form_submit_button("اشتراك (إرسال رقم التحويل للأستاذ)")
-            
-            if pay_btn:
-                if orange_sender_input:
-                    t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    try:
-                        with sqlite3.connect(DB_NAME) as conn:
-                            c = conn.cursor()
-                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
-                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) VALUES (?, ?, 'pending', ?, ?)",
-                                      (student_phone, t_phone, orange_sender_input, t_now_str))
-                            conn.commit()
-                        st.success("تم إرسال طلب الاشتراك ورقم أورانج كاش للأستاذ بنجاح! في انتظار التفعيل.")
-                        st.rerun()
-                    except:
-                        pass
-                else:
-                    st.error("الرجاء إدخال رقم أورانج كاش المحول منه!")
-                    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def render_top_complaint_section(phone, name, role):
     with st.expander("📢 إرسال شكوى أو بلاغ للمطور (اضغط هنا)", expanded=False):
@@ -734,20 +630,147 @@ else:
             logout_user()
             st.rerun()
 
-        st.subheader("👨‍🏫 الأساتذة المتاحين في المنصة")
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT name, subject, price, room_id, phone FROM teachers WHERE is_blocked=0")
-                teachers = c.fetchall()
+        # إذا لم يتم اختيار أستاذ للاشتراك، نعرض قائمة الأساتذة (الاسم والمادة فقط)
+        if st.session_state.sub_target_teacher is None:
+            st.subheader("👨‍🏫 أساتذة المنصة المتاحين")
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT name, subject, price, room_id, phone FROM teachers WHERE is_blocked=0")
+                    teachers = c.fetchall()
+                
+                if teachers:
+                    for t_name, t_sub, t_price, r_id, t_ph in teachers:
+                        st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                        col_info, col_btn = st.columns([3, 1])
+                        col_info.markdown(f"### 👨‍🏫 {t_name}")
+                        col_info.markdown(f"📖 **المادة:** {t_sub}")
+                        
+                        # زر الاشتراك المجاور للاستاذ
+                        if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
+                            st.session_state.sub_target_teacher = {
+                                "phone": t_ph,
+                                "name": t_name,
+                                "subject": t_sub,
+                                "price": t_price,
+                                "room_id": r_id
+                            }
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.info("لا يوجد أساتذة متاحين حالياً.")
+            except:
+                pass
+        else:
+            # شاشة فرعية مخصصة للاستاذ المختار لعملية الاشتراك أو الدخول بعد القبول
+            target_t = st.session_state.sub_target_teacher
+            t_phone_val = target_t["phone"]
+            t_name_val = target_t["name"]
+            t_price_val = target_t["price"]
+            r_id_val = target_t["room_id"]
             
-            if teachers:
-                for t_name, t_sub, t_price, r_id, t_ph in teachers:
-                    render_student_teacher_card(t_name, t_sub, t_price, r_id, t_ph, st.session_state.user_phone)
+            if st.button("⬅️ العودة لقائمة الأساتذة"):
+                st.session_state.sub_target_teacher = None
+                st.rerun()
+                
+            st.markdown(f"## 👨‍🏫 الأستاذ: {t_name_val} ({target_t['subject']})")
+            
+            # فحص حالة الاشتراك مع هذا الأستاذ وتطبيق قاعدة إلغاء الاشتراك تلقائياً بعد 30 يوم
+            sub_info = None
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                              (st.session_state.user_phone, t_phone_val))
+                    sub_info = c.fetchone()
+            except:
+                pass
+
+            sub_status = sub_info[0] if sub_info else None
+            expires_at = sub_info[1] if sub_info and len(sub_info) > 1 else None
+
+            is_expired = False
+            if expires_at and sub_status == 'active':
+                try:
+                    exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+                    if datetime.datetime.now() > exp_dt:
+                        is_expired = True
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
+                            conn.commit()
+                        sub_status = None
+                except:
+                    pass
+
+            if sub_status == 'active' and not is_expired:
+                st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
+                
+                if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone_val}"):
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
+                        conn.commit()
+                    st.rerun()
+
+                tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
+                with tab_live:
+                    stream_html = f"""
+                    <iframe src="https://vdo.ninja/?view={r_id_val}&autostart=1" 
+                            style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
+                            allow="camera; microphone; autoplay" allowfullscreen>
+                    </iframe>
+                    """
+                    components.html(stream_html, height=320)
+                    
+                with tab_media:
+                    display_student_media(t_phone_val, st.session_state.user_phone)
+                    
+                with tab_exams:
+                    render_student_exams(t_phone_val)
+                    
+                with tab_chat:
+                    render_smart_chat(t_phone_val, st.session_state.user_phone, "طالب")
+                    
+            elif sub_status == 'pending':
+                st.info("⏳ تم إرسال طلب الاشتراك للأستاذ بنجاح، في انتظار المراجعة والقبول.")
+                if st.button("إلغاء الطلب المعلق"):
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
+                        conn.commit()
+                    st.rerun()
             else:
-                st.info("لا يوجد أساتذة متاحين حالياً.")
-        except:
-            pass
+                fixed_orange_number = "01213783090"
+                
+                st.markdown(f"""
+                <div class="cash-box">
+                    مطلوب تحويل مبلغ ({t_price_val} جـ) على رقم أورانج كاش الآتي: <br>
+                    <span style="font-size: 20px; color: #4f46e5;">{fixed_orange_number}</span><br>
+                    ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه واضغط إرسال طلب الاشتراك:
+                </div>
+                """, unsafe_allow_html=True)
+                
+                with st.form(f"orange_pay_form_{t_phone_val}"):
+                    orange_sender_input = st.text_input("اكتب رقم أورانج كاش الذي حوّلت منه:")
+                    pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ ⚡")
+                    
+                    if pay_btn:
+                        if orange_sender_input:
+                            t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            try:
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
+                                    c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) VALUES (?, ?, 'pending', ?, ?)",
+                                              (st.session_state.user_phone, t_phone_val, orange_sender_input, t_now_str))
+                                    conn.commit()
+                                st.success("🎉 تم إرسال طلب الاشتراك للأستاذ بنجاح! سيظهر إشعار وصول الطلب للأستاذ فوراً.")
+                                st.rerun()
+                            except:
+                                pass
+                        else:
+                            st.error("الرجاء إدخال رقم أورانج كاش المحول منه!")
 
     elif st.session_state.user_role == "أستاذ":
         if st.button("🚪 تسجيل الخروج"):
@@ -810,6 +833,7 @@ else:
                 pass
 
         with tab_subs:
+            st.markdown("### 📥 طلبات الاشتراك الواردة من الطلاب")
             display_teacher_requests(t_phone)
 
         with tab_upload:
@@ -834,8 +858,8 @@ else:
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                           (t_phone, p_title, p_type, file_path))
                                 conn.commit()
-                            st.success("تم رفع ونشر الفيديو بنجاح وظهر لجميع طلابك!")
-                            st.rerun()
+                            # إشعار تأكيد صريح للأستاذ بأن الفيديو قد تم إنشاؤه ونشره بنجاح
+                            st.success("✅ تم إنشاء ونشر الفيديو بنجاح وأصبح متاحاً للطلاب المشتركين!")
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء حفظ الملف: {e}")
                     else:
