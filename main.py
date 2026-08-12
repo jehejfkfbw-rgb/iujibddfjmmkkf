@@ -8,7 +8,7 @@ import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. إعدادات التطبيق وتصميم الواجهة النظيفة
+# 1. إعدادات التطبيق وتصميم الواجهة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
 
@@ -329,6 +329,17 @@ def display_teacher_requests(teacher_phone):
             if subs:
                 now = datetime.datetime.now()
                 for s_ph, status, orange_sender, req_at, expires_at in subs:
+                    # التحقق التلقائي من انتهاء مدة الـ 30 يوم وإلغاء الاشتراك تلقائياً
+                    if status == 'active' and expires_at:
+                        try:
+                            exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+                            if now > exp_dt:
+                                c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                                conn.commit()
+                                continue
+                        except:
+                            pass
+
                     c.execute("SELECT name FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
@@ -367,9 +378,14 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     
-    st.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
-    st.markdown(f"📖 **المادة:** {t_sub} | 💰 **سعر الاشتراك (30 يوم):** {t_price} جـ")
+    # 1. زر الضغط على اسم الأستاذ للتحويل لصفحته أو إظهار تفاصيل الاشتراك في الجنب/الأسفل
+    col_t_info, col_t_btn = st.columns([3, 1])
+    col_t_info.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
+    col_t_info.markdown(f"📖 **المادة:** {t_sub} | 💰 **سعر الاشتراك (30 يوم):** {t_price} جـ")
     
+    show_subscribe_panel = col_t_btn.button("اشتراك ⚡", key=f"btn_sub_toggle_{t_phone}")
+
+    # التحقق من حالة الاشتراك وتحديث انتهاء الـ 30 يوم تلقائياً للطلاب أيضاً
     sub_info = None
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -389,6 +405,12 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
             if datetime.datetime.now() > exp_dt:
                 is_expired = True
+                # إلغاء الاشتراك تلقائياً بعد مرور 30 يوم
+                with sqlite3.connect(DB_NAME) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
+                    conn.commit()
+                sub_status = None
         except:
             pass
 
@@ -422,11 +444,16 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             render_smart_chat(t_phone, student_phone, "طالب")
             
     else:
-        st.info("⚠️ غير مشترك مع هذا الأستاذ. قم بالتحويل واكتب رقم أورانج كاش الخاص بك أدناه:")
+        st.info("⚠️ غير مشترك مع هذا الأستاذ. قم بالتحويل للرقم المخصص واكتب رقم أورانج كاش الخاص بك أدناه:")
+        
+        # الرقم الثابت المحدد من حضرتك: 01213783090
+        fixed_orange_number = "01213783090"
         
         st.markdown(f"""
         <div class="cash-box">
-            يرجى تحويل مبلغ ({t_price} جـ) على رقم أورانج كاش الخاص بالأستاذ، ثم اكتب رقم أورانج كاش الذي حوّلت منه ليرسله للأستاذ:
+            يرجى تحويل مبلغ ({t_price} جـ) على رقم أورانج كاش الآتي: <br>
+            <span style="font-size: 20px; color: #4f46e5;">{fixed_orange_number}</span><br>
+            ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه ليرسله للأستاذ:
         </div>
         """, unsafe_allow_html=True)
         
