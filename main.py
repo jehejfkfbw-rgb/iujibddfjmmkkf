@@ -78,12 +78,15 @@ st.markdown("""
         border: 1px solid #fdba74 !important;
     }
     
-    .top-complaint-box {
-        background: #fff1f2 !important;
-        border: 1px solid #fda4af !important;
-        border-radius: 16px;
-        padding: 15px;
-        margin-bottom: 20px;
+    .success-alert {
+        background: #f0fdf4 !important;
+        color: #166534 !important;
+        padding: 15px !important;
+        border-radius: 14px !important;
+        border: 1px solid #bbf7d0 !important;
+        font-weight: bold !important;
+        text-align: center !important;
+        margin: 15px 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -322,7 +325,7 @@ def display_student_media(teacher_phone, student_phone):
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
-    st_autorefresh(interval=2000, key=f"refresh_subs_{teacher_phone}")
+    st_autorefresh(interval=1500, key=f"refresh_subs_{teacher_phone}")
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
@@ -346,8 +349,8 @@ def display_teacher_requests(teacher_phone):
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
-                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | حالة الاشتراك: **{status}**")
-                    st.markdown(f"💳 **رقم أورانج كاش المحول منه من الطالب:** `{orange_sender or 'غير متوفر'}`")
+                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | الحالة: **{status}**")
+                    st.markdown(f"💳 **رقم أورانج كاش المحول منه:** `{orange_sender or 'غير متوفر'}` | وقت الطلب: `{req_at}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
                         col_act1, col_act2 = st.columns(2)
@@ -370,13 +373,12 @@ def display_teacher_requests(teacher_phone):
                             
                     st.write("---")
             else:
-                st.info("لا توجد طلبات اشتراك حالياً.")
+                st.info("لا توجد طلبات اشتراك معلقة حالياً.")
     except:
         pass
 
 def render_top_complaint_section(phone, name, role):
     with st.expander("📢 إرسال شكوى أو بلاغ للمطور (اضغط هنا)", expanded=False):
-        st.markdown("<div class='top-complaint-box'>", unsafe_allow_html=True)
         with st.form("top_complaint_form", clear_on_submit=True):
             st.markdown("<b>إرسال شكوى مباشرة للإدارة والمطور:</b>", unsafe_allow_html=True)
             c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ هنا:")
@@ -392,7 +394,6 @@ def render_top_complaint_section(phone, name, role):
                     st.success("تم إرسال شكواك بنجاح للمطور وسيتم مراجعتها فوراً.")
                 except:
                     st.error("حدث خطأ أثناء الإرسال.")
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 7. الواجهة الرئيسية
@@ -727,7 +728,11 @@ else:
                     render_smart_chat(t_phone_val, st.session_state.user_phone, "طالب")
                     
             elif sub_status == 'pending':
-                st.info("⏳ تم إرسال طلب الاشتراك للأستاذ بنجاح، في انتظار المراجعة والقبول.")
+                st.markdown("""
+                <div class="success-alert">
+                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار المراجعة والتفعيل.
+                </div>
+                """, unsafe_allow_html=True)
                 if st.button("إلغاء الطلب المعلق"):
                     with sqlite3.connect(DB_NAME) as conn:
                         c = conn.cursor()
@@ -755,14 +760,14 @@ else:
                             try:
                                 with sqlite3.connect(DB_NAME) as conn:
                                     c = conn.cursor()
-                                    c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
-                                    c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) VALUES (?, ?, 'pending', ?, ?)",
+                                    # إدخال الطلب أو استبداله لضمان نجاح العملية فوراً
+                                    c.execute("""INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) 
+                                               VALUES (?, ?, 'pending', ?, ?)""",
                                               (st.session_state.user_phone, t_phone_val, orange_sender_input, t_now_str))
                                     conn.commit()
-                                st.success("🎉 تم إرسال طلب الاشتراك للأستاذ بنجاح! سيظهر إشعار وصول الطلب للأستاذ فوراً.")
                                 st.rerun()
-                            except:
-                                pass
+                            except Exception as e:
+                                st.error(f"خطأ في إرسال الطلب: {e}")
                         else:
                             st.error("الرجاء إدخال رقم أورانج كاش المحول منه!")
 
