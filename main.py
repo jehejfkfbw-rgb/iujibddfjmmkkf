@@ -6,27 +6,32 @@ import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. إعدادات التصميم وإخفاء الشريط العائم نهائياً
+# 1. إعدادات التصميم والإخفاء الجذري لكل الأشرطة
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="📚", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display: none;}
+    /* إخفاء القائمة العلوية وشريط الأدوات وأي أزرار عائمة تماماً */
+    #MainMenu {visibility: hidden !important; display: none !important;}
+    footer {visibility: hidden !important; display: none !important;}
+    header {visibility: hidden !important; display: none !important;}
+    .stDeployButton {display: none !important;}
     
-    /* إخفاء شريط أدوات ستريملايت العائم والشريط الرمادي تماماً من الشاشة */
-    div[data-testid="stToolbar"] {display: none !important;}
-    div[data-testid="stDecoration"] {display: none !important;}
-    div[data-testid="stStatusWidget"] {display: none !important;}
+    div[data-testid="stToolbar"] {display: none !important; visibility: hidden !important;}
+    div[data-testid="stDecoration"] {display: none !important; visibility: hidden !important;}
+    div[data-testid="stStatusWidget"] {display: none !important; visibility: hidden !important;}
     #stDecoration {display: none !important;}
-    header[data-testid="stHeader"] {display: none !important;}
+    header[data-testid="stHeader"] {display: none !important; visibility: hidden !important;}
+    div[data-testid="baseToolbar"] {display: none !important; visibility: hidden !important;}
+    
+    /* إخفاء شريط الأدوات العائم العبدلي أو أي أشرطة جانبية علوية */
+    .viewerBadge_container__1QSob {display: none !important;}
+    .styles_viewerBadge__1yG5_ {display: none !important;}
     
     .block-container {
         max-width: 750px !important;
-        padding-top: 1.5rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 3rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
@@ -164,7 +169,6 @@ def init_db():
             countdown_hours INTEGER DEFAULT 0,
             started_at TEXT)''')
 
-        # جدول خاص بطلبات الانضمام للمكالمة الحية (المقاليد/الكاميرا الجماعية)
         c.execute('''CREATE TABLE IF NOT EXISTS call_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_phone TEXT,
@@ -363,7 +367,6 @@ def render_live_broadcast_section(teacher_phone, student_phone=None, is_subscrib
                     pass
         st.write("---")
 
-        # لوحة تحكم الأستاذ للقبول في المكالمة الجماعية
         st.markdown("### 📞 طلبات انضمام الطلاب للمكالمة الحية (كاميرا مشتركة):")
         try:
             with sqlite3.connect(DB_NAME) as conn:
@@ -413,107 +416,106 @@ def render_live_broadcast_section(teacher_phone, student_phone=None, is_subscrib
             if can_watch or is_teacher_owner:
                 st.markdown(f"<div class='success-badge'>🔴 بث مكالمة حي نشط حالياً: {title}</div>", unsafe_allow_html=True)
                 
-                # عرض كاميرا الأستاذ الأساسية
-                if is_teacher_owner:
-                    st.markdown("### 🎥 كاميرا الأستاذ (البث الرئيسي):")
-                    st.components.v1.html("""
-                        <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
-                            <video id="teacherCam" autoplay playsinline muted style="width: 100%; max-height: 350px; border-radius: 6px;"></video>
-                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">🟢 كاميرتك تبث الآن للطلاب</p>
+                st.components.v1.html("""
+                    <div style="text-align: center; background: #111; padding: 15px; border-radius: 8px; border: 1px solid #333;">
+                        <video id="webcamVideo" autoplay playsinline muted style="width: 100%; max-height: 320px; border-radius: 6px; background: #000;"></video>
+                        <div style="margin-top: 10px;">
+                            <button onclick="startCamera()" style="background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-left: 5px;">🎥 فتح وتشغيل الكاميرا</button>
+                            <button onclick="stopCamera()" style="background: #ef4444; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">⏹️ إيقاف الكاميرا</button>
                         </div>
-                        <script>
-                            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                                .then(stream => {
-                                    document.getElementById('teacherCam').srcObject = stream;
-                                })
-                                .catch(err => {
-                                    console.log("خطأ في تشغيل الكاميرا");
-                                });
-                        </script>
-                    """, height=380)
-                else:
-                    # طالب يتابع البث
-                    st.markdown("### 🎥 شاشة البث المباشر (مع الأستاذ):")
-                    st.components.v1.html("""
-                        <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
-                            <video id="studentView" autoplay playsinline controls style="width: 100%; max-height: 350px; border-radius: 6px;"></video>
-                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">📡 جارِ استقبال البث...</p>
-                        </div>
-                        <script>
-                            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                                .then(stream => {
-                                    document.getElementById('studentView').srcObject = stream;
-                                })
-                                .catch(err => {});
-                        </script>
-                    """, height=380)
+                        <p id="camStatus" style="color: #bbb; margin-top: 8px; font-size: 13px;">انقر على زر "فتح وتشغيل الكاميرا" للسماح بالمتصفح وبدء البث</p>
+                    </div>
+                    <script>
+                        let localStream = null;
+                        async function startCamera() {
+                            try {
+                                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                                document.getElementById('webcamVideo').srcObject = localStream;
+                                document.getElementById('camStatus').innerText = "🟢 الكاميرا تعمل والبث نشط بنجاح";
+                                document.getElementById('camStatus').style.color = "#10b981";
+                            } catch (err) {
+                                document.getElementById('camStatus').innerText = "❌ تعذر الوصول للكاميرا، يرجى السماح بالأذونات من المتصفح";
+                                document.getElementById('camStatus').style.color = "#ef4444";
+                            }
+                        }
+                        function stopCamera() {
+                            if (localStream) {
+                                localStream.getTracks().forEach(track => track.stop());
+                                document.getElementById('webcamVideo').srcObject = null;
+                                document.getElementById('camStatus').innerText = "⏹️ تم إيقاف الكاميرا";
+                                document.getElementById('camStatus').style.color = "#f59e0b";
+                            }
+                        }
+                    </script>
+                """, height=420)
 
-                    # نظام طلب الانضمام للمكالمة الجماعية للطالب
-                    if student_phone:
-                        st.write("---")
-                        # فحص حالة طلب الطالب
-                        try:
-                            with sqlite3.connect(DB_NAME) as conn:
-                                c = conn.cursor()
-                                c.execute("SELECT status FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
-                                call_st_row = c.fetchone()
-                                call_status = call_st_row[0] if call_st_row else None
-                        except:
-                            call_status = None
+                if not is_teacher_owner and student_phone:
+                    st.write("---")
+                    try:
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("SELECT status FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                            call_st_row = c.fetchone()
+                            call_status = call_st_row[0] if call_st_row else None
+                    except:
+                        call_status = None
 
-                        if call_status == "accepted":
-                            st.markdown("<div class='success-badge'>🎉 تم قبولك في المكالمة! كاميرتك وصوتك مفعلان الآن مع الأستاذ.</div>", unsafe_allow_html=True)
-                            st.components.v1.html("""
-                                <div style="text-align: center; background: #111; padding: 10px; border-radius: 8px; border: 2px solid #10b981;">
-                                    <p style="color: #10b981; font-weight: bold;">كاميرتك الشخصية داخل المكالمة الجماعية:</p>
-                                    <video id="myCallCam" autoplay playsinline muted style="width: 100%; max-height: 250px; border-radius: 6px;"></video>
-                                </div>
-                                <script>
-                                    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                                        .then(stream => {
-                                            document.getElementById('myCallCam').srcObject = stream;
-                                        });
-                                </script>
-                            """, height=290)
-                            
-                            if st.button("🚪 مغادرة المكالمة الجماعية"):
-                                try:
-                                    with sqlite3.connect(DB_NAME) as conn:
-                                        c = conn.cursor()
-                                        c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
-                                        conn.commit()
-                                    st.rerun()
-                                except:
-                                    pass
+                    if call_status == "accepted":
+                        st.markdown("<div class='success-badge'>🎉 تم قبولك في المكالمة الجماعية! يمكنك فتح كاميرتك للتحدث مع الأستاذ.</div>", unsafe_allow_html=True)
+                        st.components.v1.html("""
+                            <div style="text-align: center; background: #111; padding: 10px; border-radius: 8px; border: 2px solid #10b981;">
+                                <p style="color: #10b981; font-weight: bold;">كاميرتك الشخصية داخل المكالمة:</p>
+                                <video id="myCallCam" autoplay playsinline muted style="width: 100%; max-height: 220px; border-radius: 6px; background: #000;"></video>
+                                <button onclick="startMyCam()" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 8px;">تشغيل كاميرتي</button>
+                            </div>
+                            <script>
+                                async function startMyCam() {
+                                    try {
+                                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                                        document.getElementById('myCallCam').srcObject = stream;
+                                    } catch(e) {}
+                                }
+                            </script>
+                        """, height=300)
+                        
+                        if st.button("🚪 مغادرة المكالمة الجماعية"):
+                            try:
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                                    conn.commit()
+                                st.rerun()
+                            except:
+                                pass
 
-                        elif call_status == "pending":
-                            st.warning("⏳ طلب انضمامك للمكالمة قيد الانتظار، في انتظار موافقة الأستاذ...")
-                            if st.button("إلغاء طلب الانضمام"):
-                                try:
-                                    with sqlite3.connect(DB_NAME) as conn:
-                                        c = conn.cursor()
-                                        c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
-                                        conn.commit()
-                                    st.rerun()
-                                except:
-                                    pass
-                        else:
-                            if st.button("🙋‍♂️ طلب انضمام للبث المباشر (فتح الكاميرا والمكالمة مع الأستاذ)"):
-                                try:
-                                    with sqlite3.connect(DB_NAME) as conn:
-                                        c = conn.cursor()
-                                        c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
-                                        s_n_row = c.fetchone()
-                                        s_real_name = s_n_row[0] if s_n_row else "طالب"
-                                        
-                                        t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                        c.execute("INSERT OR REPLACE INTO call_requests (teacher_phone, student_phone, student_name, status, timestamp) VALUES (?, ?, ?, 'pending', ?)",
-                                                  (teacher_phone, student_phone, s_real_name, t_now))
-                                        conn.commit()
-                                    st.success("تم إرسال طلب الانضمام للأستاذ بنجاح!")
-                                    st.rerun()
-                                except:
-                                    pass
+                    elif call_status == "pending":
+                        st.warning("⏳ طلب انضمامك للمكالمة قيد الانتظار، في انتظار موافقة الأستاذ...")
+                        if st.button("إلغاء طلب الانضمام"):
+                            try:
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM call_requests WHERE teacher_phone=? AND student_phone=?", (teacher_phone, student_phone))
+                                    conn.commit()
+                                st.rerun()
+                            except:
+                                pass
+                    else:
+                        if st.button("🙋‍♂️ طلب انضمام للبث المباشر (فتح الكاميرا والمكالمة مع الأستاذ)"):
+                            try:
+                                with sqlite3.connect(DB_NAME) as conn:
+                                    c = conn.cursor()
+                                    c.execute("SELECT name FROM users WHERE phone=?", (student_phone,))
+                                    s_n_row = c.fetchone()
+                                    s_real_name = s_n_row[0] if s_n_row else "طالب"
+                                    
+                                    t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    c.execute("INSERT OR REPLACE INTO call_requests (teacher_phone, student_phone, student_name, status, timestamp) VALUES (?, ?, ?, 'pending', ?)",
+                                              (teacher_phone, student_phone, s_real_name, t_now))
+                                    conn.commit()
+                                st.success("تم إرسال طلب الانضمام للأستاذ بنجاح!")
+                                st.rerun()
+                            except:
+                                pass
             else:
                 st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل غرفة الأستاذ.</div>", unsafe_allow_html=True)
         else:
