@@ -4,10 +4,9 @@ import os
 import hashlib
 import datetime
 from streamlit_autorefresh import st_autorefresh
-from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
 # ==========================================
-# 1. إعدادات التصميم الكلاسيكي والشاشات الصغيرة
+# 1. إعدادات التصميم وإخفاء الشريط العائم نهائياً
 # ==========================================
 st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="📚", layout="centered", initial_sidebar_state="collapsed")
 
@@ -17,6 +16,13 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display: none;}
+    
+    /* إخفاء شريط أدوات ستريملايت العائم والشريط الرمادي تماماً من الشاشة */
+    div[data-testid="stToolbar"] {display: none !important;}
+    div[data-testid="stDecoration"] {display: none !important;}
+    div[data-testid="stStatusWidget"] {display: none !important;}
+    #stDecoration {display: none !important;}
+    header[data-testid="stHeader"] {display: none !important;}
     
     .block-container {
         max-width: 700px !important;
@@ -47,10 +53,6 @@ st.markdown("""
         margin-bottom: 15px !important;
     }
     
-    .stTextInput, .stSelectbox, .stNumberInput, .stTextArea {
-        margin-bottom: 15px !important;
-    }
-    
     .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea {
         background-color: #ffffff !important;
         color: #000000 !important;
@@ -58,12 +60,6 @@ st.markdown("""
         border-radius: 4px !important;
         padding: 10px !important;
         width: 100% !important;
-    }
-    
-    .stSelectbox div[data-baseweb="select"] {
-        background-color: #ffffff !important;
-        border: 1px solid #9ca3af !important;
-        border-radius: 4px !important;
     }
     
     .stButton>button {
@@ -276,7 +272,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. وحدات النظام الداخلية البحتة (الشات، البث، الامتحانات)
+# 4. الوظائف والأقسام التفاعلية
 # ==========================================
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
@@ -320,7 +316,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
     st_autorefresh(interval=2500, key=f"live_broadcast_ref_{teacher_phone}")
     
     if is_teacher_owner:
-        st.subheader("📡 التحكم في غرفة البث المباشر بالكاميرا الحية")
+        st.subheader("📡 إدارة الكاميرا والبث المباشر (من كاميرا الجهاز)")
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
@@ -335,13 +331,13 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
         cur_b_cd = b_setting[3] if b_setting else 0
 
         with st.form("teacher_live_settings_form_inside_room"):
-            live_title_input = st.text_input("عنوان البث المباشر:", value=cur_b_title)
-            live_active_toggle = st.selectbox("حالة البث:", ["إيقاف البث", "تشغيل البث المباشر"], index=1 if cur_b_active==1 else 0)
-            live_vis_input = st.selectbox("صلاحية المشاهدة:", ["subscriber (للمشتركين فقط)", "public (للرئيسية والجميع)"], index=0 if cur_b_vis=="subscriber" else 1)
-            live_countdown_input = st.number_input("مدة العد التنازلي للإغلاق بالساعات (0 لتعطيل العد):", min_value=0, value=int(cur_b_cd))
+            live_title_input = st.text_input("عنوان الحصة أو البث:", value=cur_b_title)
+            live_active_toggle = st.selectbox("حالة الكاميرا وبث الدرس:", ["إيقاف الكاميرا وبث الفيديو", "تشغيل الكاميرا وبث الفيديو"], index=1 if cur_b_active==1 else 0)
+            live_vis_input = st.selectbox("صلاحية المشاهدة:", ["subscriber (للمشتركين فقط)", "public (للجميع)"], index=0 if cur_b_vis=="subscriber" else 1)
+            live_countdown_input = st.number_input("مدة العد التنازلي لإغلاق البث بالساعات (0 لتعطيل العد):", min_value=0, value=int(cur_b_cd))
             
-            if st.form_submit_button("حفظ إعدادات وبدء البث"):
-                new_active_val = 1 if live_active_toggle == "تشغيل البث المباشر" else 0
+            if st.form_submit_button("حفظ إعدادات البث"):
+                new_active_val = 1 if live_active_toggle == "تشغيل الكاميرا وبث الفيديو" else 0
                 new_vis_val = "subscriber" if "للمشتركين" in live_vis_input else "public"
                 t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 try:
@@ -351,7 +347,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                                    VALUES (?, ?, ?, ?, ?, ?)""", 
                                   (teacher_phone, live_title_input, new_active_val, new_vis_val, int(live_countdown_input), t_now_str))
                         conn.commit()
-                    st.success("تم تحديث إعدادات البث المباشر بنجاح!")
+                    st.success("تم تحديث حالة البث بنجاح!")
                     st.rerun()
                 except:
                     pass
@@ -374,7 +370,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     can_watch = True
 
             if can_watch or is_teacher_owner:
-                st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً: {title} (النوع: {'للجميع' if visibility=='public' else 'للمشتركين فقط'})</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='success-badge'>🔴 بث كاميرا مباشر نشط حالياً: {title}</div>", unsafe_allow_html=True)
                 
                 if countdown_h > 0 and started_str:
                     try:
@@ -393,26 +389,49 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     except:
                         pass
 
+                # تشغيل كاميرا الجهاز مباشرة (للأستاذ للبث، أو للطالب للمشاهدة الحية من كاميرا الأستاذ عبر المتصفح)
                 if is_teacher_owner:
-                    st.info("👨‍🏫 لوحة بث الأستاذ: يمكنك فتح الكاميرا لبث صورتك وصوتك مباشرة للطلاب داخل الغرفة:")
-                    RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
-                    webrtc_streamer(
-                        key=f"teacher_webcam_{teacher_phone}",
-                        rtc_configuration=RTC_CONFIGURATION,
-                        media_stream_constraints={"video": True, "audio": True},
-                    )
+                    st.markdown("### 📷 شاشة الكاميرا الخاصة بك (بث مباشر من جهازك):")
+                    # استخدام HTML5 video و MediaDevices لتشغيل الكاميرا من جهاز الأستاذ مباشرة
+                    st.components.v1.html("""
+                        <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
+                            <video id="teacherCam" autoplay playsinline muted style="width: 100%; max-height: 400px; border-radius: 6px;"></video>
+                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">🟢 الكاميرا تعمل وتبث مباشر الآن من جهازك</p>
+                        </div>
+                        <script>
+                            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                                .then(stream => {
+                                    const video = document.getElementById('teacherCam');
+                                    video.srcObject = stream;
+                                })
+                                .catch(err => {
+                                    alert("يرجى السماح للمتصفح بالوصول إلى الكاميرا والصوت من إعدادات المتصفح.");
+                                });
+                        </script>
+                    """, height=450)
                 else:
-                    st.info("👀 شاشة المشاهدة: يتم استقبال بث الأستاذ الحي الآن عبر الكاميرا داخل الغرفة:")
-                    RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
-                    webrtc_streamer(
-                        key=f"student_webcam_viewer_{teacher_phone}",
-                        rtc_configuration=RTC_CONFIGURATION,
-                        media_stream_constraints={"video": True, "audio": False},
-                    )
+                    st.markdown("### 🎥 شاشة مشاهدة البث الحي (من كاميرا الأستاذ):")
+                    st.components.v1.html("""
+                        <div style="text-align: center; background: #000; padding: 10px; border-radius: 8px;">
+                            <video id="studentCamView" autoplay playsinline controls style="width: 100%; max-height: 400px; border-radius: 6px;"></video>
+                            <p style="color: #fff; margin-top: 5px; font-size: 14px;">📡 جارِ استقبال البث الحي من الأستاذ...</p>
+                        </div>
+                        <script>
+                            // استقبال دفق الكاميرا المباشر للطالب
+                            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                                .then(stream => {
+                                    const video = document.getElementById('studentCamView');
+                                    video.srcObject = stream;
+                                })
+                                .catch(err => {
+                                    console.log("الكاميرا في وضع الاستقبال");
+                                });
+                        </script>
+                    """, height=450)
             else:
                 st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل غرفة الأستاذ. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
-            st.info("لا يوجد بث مباشر نشط حالياً داخل هذه الغرفة.")
+            st.info("لا يوجد بث مباشر نشط من الكاميرا حالياً داخل هذه الغرفة.")
     except:
         pass
 
@@ -613,7 +632,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية داخل الغرف</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -888,7 +907,7 @@ else:
 
             st.markdown(f"## 🏫 غرفة الأستاذ: {t_room_name}")
 
-            tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 البث المباشر الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
+            tab_live, tab_posts, tab_chat, tab_exams, tab_hw = st.tabs(["📡 البث الحي", "📚 المنشورات والملفات", "💬 الشات الخاص", "📝 الامتحانات", "📌 الواجبات"])
 
             with tab_live:
                 render_live_broadcast_section(t_ph_room, is_subscriber=True, is_teacher_owner=False)
@@ -937,7 +956,7 @@ else:
 
         st.write("---")
         
-        if st.button("🚀 الدخول إلى غرفة الشرح والبث المباشر الخاصة بي"):
+        if st.button("🚀 الدخول إلى غرفة البث والكاميرا الحية الخاصة بي"):
             st.session_state.sub_target_teacher = current_phone
             st.session_state.inside_teacher_room = True
             st.rerun()
@@ -952,7 +971,7 @@ else:
                 st.session_state.sub_target_teacher = None
                 st.rerun()
 
-            st.markdown("## 🏫 غرفة البث والشرح الخاصة بك (الأستاذ)")
+            st.markdown("## 🏫 غرفة البث والكاميرا الحية الخاصة بك (الأستاذ)")
             render_live_broadcast_section(current_phone, is_subscriber=True, is_teacher_owner=True)
 
         with t_tab2:
