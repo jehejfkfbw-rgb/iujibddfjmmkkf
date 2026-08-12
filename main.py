@@ -36,7 +36,6 @@ st.markdown("""
         font-weight: bold !important;
     }
     
-    /* تصميم الصناديق الكلاسيكية البسيطة */
     .classic-box {
         background-color: #f9fafb !important;
         border: 1px solid #d1d5db !important;
@@ -45,7 +44,6 @@ st.markdown("""
         margin-bottom: 15px !important;
     }
     
-    /* الحقول الإدخالية العادية */
     .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea {
         background-color: #ffffff !important;
         color: #000000 !important;
@@ -54,7 +52,6 @@ st.markdown("""
         padding: 8px !important;
     }
     
-    /* الأزرار التقليدية البسيطة */
     .stButton>button {
         background-color: #f3f4f6 !important;
         color: #1f2937 !important;
@@ -264,7 +261,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. وحدات النظام المتقدمة (شات، بث مباشر، امتحانات)
+# 4. وحدات النظام (شات، بث مباشر داخلي، امتحانات)
 # ==========================================
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
@@ -304,9 +301,9 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
         pass
 
 @st.fragment
-def render_live_broadcast_section(teacher_phone, is_subscriber=False):
+def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher_owner=False):
     st_autorefresh(interval=3000, key=f"live_broadcast_ref_{teacher_phone}")
-    st.subheader("📡 نظام البث المباشر")
+    st.subheader("📡 البث المباشر داخل المنصة")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -317,7 +314,7 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False):
         if b_row and b_row[2] == 1:
             title, m_url, active_status, countdown_h, started_str = b_row
             
-            if is_subscriber:
+            if is_subscriber or is_teacher_owner:
                 st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً: {title}</div>", unsafe_allow_html=True)
                 
                 if countdown_h > 0 and started_str:
@@ -330,21 +327,27 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False):
                         if diff_sec > 0:
                             hrs_left = int(diff_sec // 3600)
                             mins_left = int((diff_sec % 3600) // 60)
-                            st.warning(f"⏳ تنبيه العد التنازلي: سيتم إغلاق الغرفة المباشرة خلال: **{hrs_left} ساعة و {mins_left} دقيقة**.")
+                            st.warning(f"⏳ العد التنازلي لإغلاق البث: **{hrs_left} ساعة و {mins_left} دقيقة**.")
                         else:
-                            st.error("⚠️ انتهى الوقت المخصص لجلسة البث المباشر.")
+                            st.error("⚠️ انتهى الوقت المخصص للبث المباشر.")
                             return
                     except:
                         pass
 
+                # تشغيل البث المباشر المباشر داخل التطبيق (سواء فيديو مسجل مباشر، رابط كاميرا، أو ملف فيديو مرفوع كمحاضرة بث)
                 if m_url:
-                    st.video(m_url)
+                    if "http" in m_url:
+                        st.video(m_url)
+                    elif os.path.exists(m_url):
+                        st.video(m_url)
+                    else:
+                        st.info(f"بث مباشر نشط: {m_url}")
                 else:
-                    st.info("الأستاذ يبث حالياً.")
+                    st.info("الأستاذ يبث الآن بدون رابط مرئي إضافي.")
             else:
                 st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط**. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
-            st.info("لا يوجد بث مباشر نشط حالياً.")
+            st.info("لا يوجد بث مباشر نشط حالياً من هذا الأستاذ.")
     except:
         pass
 
@@ -545,7 +548,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر الداخلي</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -839,7 +842,7 @@ else:
 
             if is_active_sub:
                 st.markdown(f"<div class='success-badge'>🎉 أنت مشترك بنشاط مع الأستاذ: {t_name}</div>", unsafe_allow_html=True)
-                room_tab, live_tab, chat_tab, exam_tab, hw_tab = st.tabs(["📚 محتوى الأستاذ", "📡 البث المباشر", "💬 الشات", "📝 الامتحانات", "📋 الواجبات"])
+                room_tab, live_tab, chat_tab, exam_tab, hw_tab = st.tabs(["📚 محتوى الأستاذ", "📡 البث المباشر الداخلي", "💬 الشات الفوري", "📝 الامتحانات", "📋 الواجبات"])
                 
                 with room_tab:
                     display_student_media(t_ph, st.session_state.user_phone, is_subscriber=True)
@@ -908,7 +911,7 @@ else:
 
         st.write("---")
         tab_posts, tab_live_ctrl, tab_subs, tab_chats, tab_exams, tab_hw, tab_hw_sub = st.tabs([
-            "📌 المنشورات", "📡 البث والعد التنازلي", "👥 الاشتراكات", "💬 الشات", "📝 امتحان", "📋 واجب", "📥 حلول الطلاب"
+            "📌 المنشورات", "📡 البث المباشر الداخلي", "👥 الاشتراكات", "💬 الشات", "📝 امتحان", "📋 واجب", "📥 حلول الطلاب"
         ])
         
         with tab_posts:
@@ -935,13 +938,26 @@ else:
                     except:
                         pass
         with tab_live_ctrl:
-            st.markdown("### إعدادات البث المباشر")
+            st.markdown("### إدارة وبث المحاضرة الحية من داخل التطبيق")
+            st.markdown("يمكنك رفع فيديو بث مباشر مسجل، أو ربط رابط فيديو مباشر، أو تفعيل غرفة البث الفوري ليراها الطلاب حصرياً من داخل التطبيق مباشرة.")
+            
+            # معاينة البث المباشر الخاص بالأستاذ في لوحة التحكم
+            render_live_broadcast_section(t_phone, is_subscriber=True, is_teacher_owner=True)
+            
             with st.form("live_ctrl_form"):
-                live_title = st.text_input("عنوان البث:")
-                live_url = st.text_input("رابط الفيديو:")
-                countdown_hrs = st.number_input("مدة العد التنازلي (بالساعات):", min_value=0, value=4)
-                is_live_on = st.checkbox("تشغيل البث المباشر (للمشتركين فقط)")
-                if st.form_submit_button("حفظ إعدادات البث"):
+                live_title = st.text_input("عنوان البث المباشر:")
+                live_url = st.text_input("رابط بث مباشر (رابط فيديو أو ملف مباشر):")
+                live_file_upload = st.file_uploader("أو رفع فيديو البث المباشر مباشرة من جهازك:", type=["mp4", "mkv", "avi"])
+                countdown_hrs = st.number_input("مدة العد التنازلي لإغلاق الغرفة (بالساعات):", min_value=0, value=3)
+                is_live_on = st.checkbox("تشغيل البث المباشر الآن للطلاب المشتركين")
+                
+                if st.form_submit_button("بدء وبث المحاضرة داخل التطبيق"):
+                    final_media_path = live_url
+                    if live_file_upload:
+                        final_media_path = os.path.join(MEDIA_DIR, live_file_upload.name)
+                        with open(final_media_path, "wb") as f:
+                            f.write(live_file_upload.getbuffer())
+                            
                     t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     active_val = 1 if is_live_on else 0
                     try:
@@ -950,9 +966,9 @@ else:
                             c.execute("""INSERT INTO live_broadcasts (teacher_phone, title, media_url, is_active, countdown_hours, started_at) 
                                        VALUES (?, ?, ?, ?, ?, ?)
                                        ON CONFLICT(teacher_phone) DO UPDATE SET title=?, media_url=?, is_active=?, countdown_hours=?, started_at=?""",
-                                      (t_phone, live_title, live_url, active_val, countdown_hrs, t_now, live_title, live_url, active_val, countdown_hrs, t_now))
+                                      (t_phone, live_title, final_media_path, active_val, countdown_hrs, t_now, live_title, final_media_path, active_val, countdown_hrs, t_now))
                             conn.commit()
-                        st.success("تم تحديث البث!")
+                        st.success("تم تشغيل وبث المحاضرة بنجاح داخل التطبيق!")
                         st.rerun()
                     except:
                         pass
@@ -1124,7 +1140,7 @@ else:
                 pass
         with dev_tab4:
             try:
-                with sqlite3.connect(DB_NAME) as conn:
+                with sqlite3.connect(DB_Name) as conn:
                     c = conn.cursor()
                     c.execute("SELECT COUNT(*) FROM users WHERE role='طالب'")
                     ts = c.fetchone()[0]
