@@ -92,7 +92,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. إعداد قاعدة البيانات والجداول (مع ضمان التحديث التلقائي للأعمدة)
+# 2. إعداد قاعدة البيانات والجداول
 # ==========================================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
@@ -119,7 +119,6 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
             status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
-        # التأكد من وجود عمود orange_cash_sender حتى لو الجدول قديم
         try:
             c.execute("ALTER TABLE subscriptions ADD COLUMN orange_cash_sender TEXT")
         except:
@@ -175,6 +174,10 @@ if "is_logged_in" not in st.session_state:
 if "sub_target_teacher" not in st.session_state:
     st.session_state.sub_target_teacher = None
 
+# متغير لحالة الدخول لقاعة الأستاذ بعد قبول الاشتراك
+if "inside_teacher_room" not in st.session_state:
+    st.session_state.inside_teacher_room = False
+
 def login_user(phone, role):
     st.session_state.is_logged_in = True
     st.session_state.user_phone = phone
@@ -187,6 +190,7 @@ def logout_user():
     st.session_state.user_phone = ""
     st.session_state.user_role = None
     st.session_state.sub_target_teacher = None
+    st.session_state.inside_teacher_room = False
     st.query_params.clear()
 
 # ==========================================
@@ -650,15 +654,43 @@ else:
                         col_info.markdown(f"### 👨‍🏫 {t_name}")
                         col_info.markdown(f"📖 **المادة:** {t_sub}")
                         
-                        if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
-                            st.session_state.sub_target_teacher = {
-                                "phone": t_ph,
-                                "name": t_name,
-                                "subject": t_sub,
-                                "price": t_price,
-                                "room_id": r_id
-                            }
-                            st.rerun()
+                        # التحقق من حالة اشتراك الطالب مع هذا الأستاذ لمعرفة ماذا يظهر على الكارت
+                        sub_check_status = None
+                        try:
+                            with sqlite3.connect(DB_NAME) as conn_sub:
+                                cs = conn_sub.cursor()
+                                cs.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                                          (st.session_state.user_phone, t_ph))
+                                s_row = cs.fetchone()
+                                if s_row:
+                                    sub_check_status = s_row[0]
+                        except:
+                            pass
+
+                        if sub_check_status == 'active':
+                            if col_btn.button("دخول لقاعة الأستاذ 🎬", key=f"btn_enter_room_{t_ph}"):
+                                st.session_state.sub_target_teacher = {
+                                    "phone": t_ph,
+                                    "name": t_name,
+                                    "subject": t_sub,
+                                    "price": t_price,
+                                    "room_id": r_id
+                                }
+                                st.session_state.inside_teacher_room = True
+                                st.rerun()
+                        elif sub_check_status == 'pending':
+                            col_btn.markdown("<span style='color:orange; font-weight:bold;'>قيد المراجعة ⏳</span>", unsafe_allow_html=True)
+                        else:
+                            if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
+                                st.session_state.sub_target_teacher = {
+                                    "phone": t_ph,
+                                    "name": t_name,
+                                    "subject": t_sub,
+                                    "price": t_price,
+                                    "room_id": r_id
+                                }
+                                st.session_state.inside_teacher_room = False
+                                st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.info("لا يوجد أساتذة متاحين حالياً.")
@@ -673,6 +705,7 @@ else:
             
             if st.button("⬅️ العودة لقائمة الأساتذة"):
                 st.session_state.sub_target_teacher = None
+                st.session_state.inside_teacher_room = False
                 st.rerun()
                 
             st.markdown(f"## 👨‍🏫 الأستاذ: {t_name_val} ({target_t['subject']})")
@@ -705,33 +738,45 @@ else:
                     pass
 
             if sub_status == 'active' and not is_expired:
-                st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
-                
-                if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone_val}"):
-                    with sqlite3.connect(DB_NAME) as conn:
-                        c = conn.cursor()
-                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
-                        conn.commit()
-                    st.rerun()
+                # إذا كان الطالب لم يضغط بعد على زر الدخول للقاعة، نعرض له زر الدخول المميز ونخفي زر الاشتراك القديم
+                if not st.session_state.inside_teacher_room:
+                    st.markdown("""
+                    <div class="success-alert">
+                        🎉 مبروك! تم قبول اشتراكك بنجاح من الأستاذ.
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button("دخول لقاعة الأستاذ وعرض الفيديوهات والبث 🎬"):
+                        st.session_state.inside_teacher_room = True
+                        st.rerun()
+                else:
+                    # عند الضغط على زر الدخول، تفتح له محتويات القاعة والتبويبات
+                    if st.button("❌ إلغاء الاشتراك والخروج من القاعة"):
+                        with sqlite3.connect(DB_NAME) as conn:
+                            c = conn.cursor()
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
+                            conn.commit()
+                        st.session_state.inside_teacher_room = False
+                        st.rerun()
 
-                tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
-                with tab_live:
-                    stream_html = f"""
-                    <iframe src="https://vdo.ninja/?view={r_id_val}&autostart=1" 
-                            style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
-                            allow="camera; microphone; autoplay" allowfullscreen>
-                    </iframe>
-                    """
-                    components.html(stream_html, height=320)
-                    
-                with tab_media:
-                    display_student_media(t_phone_val, st.session_state.user_phone)
-                    
-                with tab_exams:
-                    render_student_exams(t_phone_val)
-                    
-                with tab_chat:
-                    render_smart_chat(t_phone_val, st.session_state.user_phone, "طالب")
+                    tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
+                    with tab_live:
+                        stream_html = f"""
+                        <iframe src="https://vdo.ninja/?view={r_id_val}&autostart=1" 
+                                style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
+                                allow="camera; microphone; autoplay" allowfullscreen>
+                        </iframe>
+                        """
+                        components.html(stream_html, height=320)
+                        
+                    with tab_media:
+                        display_student_media(t_phone_val, st.session_state.user_phone)
+                        
+                    with tab_exams:
+                        render_student_exams(t_phone_val)
+                        
+                    with tab_chat:
+                        render_smart_chat(t_phone_val, st.session_state.user_phone, "طالب")
                     
             elif sub_status == 'pending':
                 st.markdown("""
