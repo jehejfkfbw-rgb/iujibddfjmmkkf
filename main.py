@@ -163,7 +163,6 @@ if "is_logged_in" not in st.session_state:
         st.session_state.user_phone = ""
         st.session_state.user_role = None
 
-# إدارة الانتقال لشاشة الاشتراك المخصصة للأستاذ
 if "sub_target_teacher" not in st.session_state:
     st.session_state.sub_target_teacher = None
 
@@ -333,7 +332,6 @@ def display_teacher_requests(teacher_phone):
             if subs:
                 now = datetime.datetime.now()
                 for s_ph, status, orange_sender, req_at, expires_at in subs:
-                    # فحص تلقائي لمرور 30 يوماً وإلغاء الاشتراك تلقائياً
                     if status == 'active' and expires_at:
                         try:
                             exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
@@ -630,7 +628,6 @@ else:
             logout_user()
             st.rerun()
 
-        # إذا لم يتم اختيار أستاذ للاشتراك، نعرض قائمة الأساتذة (الاسم والمادة فقط)
         if st.session_state.sub_target_teacher is None:
             st.subheader("👨‍🏫 أساتذة المنصة المتاحين")
             try:
@@ -646,7 +643,6 @@ else:
                         col_info.markdown(f"### 👨‍🏫 {t_name}")
                         col_info.markdown(f"📖 **المادة:** {t_sub}")
                         
-                        # زر الاشتراك المجاور للاستاذ
                         if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
                             st.session_state.sub_target_teacher = {
                                 "phone": t_ph,
@@ -662,7 +658,6 @@ else:
             except:
                 pass
         else:
-            # شاشة فرعية مخصصة للاستاذ المختار لعملية الاشتراك أو الدخول بعد القبول
             target_t = st.session_state.sub_target_teacher
             t_phone_val = target_t["phone"]
             t_name_val = target_t["name"]
@@ -675,7 +670,6 @@ else:
                 
             st.markdown(f"## 👨‍🏫 الأستاذ: {t_name_val} ({target_t['subject']})")
             
-            # فحص حالة الاشتراك مع هذا الأستاذ وتطبيق قاعدة إلغاء الاشتراك تلقائياً بعد 30 يوم
             sub_info = None
             try:
                 with sqlite3.connect(DB_NAME) as conn:
@@ -858,7 +852,6 @@ else:
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status) VALUES (?, ?, ?, ?, 'approved')",
                                           (t_phone, p_title, p_type, file_path))
                                 conn.commit()
-                            # إشعار تأكيد صريح للأستاذ بأن الفيديو قد تم إنشاؤه ونشره بنجاح
                             st.success("✅ تم إنشاء ونشر الفيديو بنجاح وأصبح متاحاً للطلاب المشتركين!")
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء حفظ الملف: {e}")
