@@ -4,6 +4,7 @@ import os
 import hashlib
 import datetime
 from streamlit_autorefresh import st_autorefresh
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
 # ==========================================
 # 1. إعدادات التصميم الكلاسيكي القديم (Light Theme)
@@ -148,8 +149,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             teacher_phone TEXT UNIQUE,
             title TEXT,
-            file_path TEXT,
             is_active INTEGER DEFAULT 0,
+            visibility TEXT DEFAULT 'subscriber',
             countdown_hours INTEGER DEFAULT 0,
             started_at TEXT)''')
 
@@ -261,7 +262,7 @@ def logout_user():
     st.query_params.clear()
 
 # ==========================================
-# 4. وحدات النظام الداخلية البحتة
+# 4. وحدات النظام الداخلية البحتة (مع كاميرا البث المباشر)
 # ==========================================
 @st.fragment
 def render_smart_chat(teacher_phone, student_phone, current_user_role):
@@ -302,20 +303,28 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
 
 @st.fragment
 def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher_owner=False):
-    st_autorefresh(interval=3000, key=f"live_broadcast_ref_{teacher_phone}")
-    st.subheader("📡 البث المباشر داخل التطبيق حصرياً")
+    st_autorefresh(interval=2500, key=f"live_broadcast_ref_{teacher_phone}")
+    st.subheader("📡 غرفة البث المباشر بالكاميرا الحية داخل التطبيق")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT title, file_path, is_active, countdown_hours, started_at FROM live_broadcasts WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT title, is_active, visibility, countdown_hours, started_at FROM live_broadcasts WHERE teacher_phone=?", (teacher_phone,))
             b_row = c.fetchone()
             
-        if b_row and b_row[2] == 1:
-            title, f_path, active_status, countdown_h, started_str = b_row
+        if b_row and b_row[1] == 1:
+            title, active_status, visibility, countdown_h, started_str = b_row
             
-            if is_subscriber or is_teacher_owner:
-                st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً داخل المنصة: {title}</div>", unsafe_allow_html=True)
+            # تحديد الصلاحية بناءً على خيار الأستاذ (مشتركون فقط أم للجميع)
+            can_watch = False
+            if visibility == "public":
+                can_watch = True
+            else: # subscriber
+                if is_subscriber or is_teacher_owner:
+                    can_watch = True
+
+            if can_watch or is_teacher_owner:
+                st.markdown(f"<div class='success-badge'>🔴 بث مباشر نشط حالياً: {title} (النوع: {'للجميع' if visibility=='public' else 'للمشتركين فقط'})</div>", unsafe_allow_html=True)
                 
                 if countdown_h > 0 and started_str:
                     try:
@@ -334,13 +343,26 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False, is_teacher
                     except:
                         pass
 
-                # التشغيل الداخلي الصرف من ملف البث المرفع داخل التطبيق
-                if f_path and os.path.exists(f_path):
-                    st.video(f_path)
+                # إذا كان الأستاذ صاحب البث هو من يفتح الغرفة، يمكنه بث كاميرته مباشرة
+                if is_teacher_owner:
+                    st.info("👨‍🏫 لوحة بث الأستاذ: يمكنك فتح الكاميرا لبث صورتك وصوتك مباشرة للطلاب داخل التطبيق:")
+                    RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+                    webrtc_streamer(
+                        key=f"teacher_webcam_{teacher_phone}",
+                        rtc_configuration=RTC_CONFIGURATION,
+                        media_stream_constraints={"video": True, "audio": True},
+                    )
                 else:
-                    st.info("غرفة البث المباشر مفعلة بانتظار رفع ملف البث أو تشغيله من قِبل الأستاذ.")
+                    # للطلاب والمشاهدين داخل المنصة: عرض شاشة استقبال البث المباشر من الكاميرا الحية
+                    st.info("👀 شاشة المشاهدة: يتم استقبال بث الأستاذ الحي الآن عبر الكاميرا:")
+                    RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+                    webrtc_streamer(
+                        key=f"student_webcam_viewer_{teacher_phone}",
+                        rtc_configuration=RTC_CONFIGURATION,
+                        media_stream_constraints={"video": True, "audio": False},
+                    )
             else:
-                st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط** داخل المنصة. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='cash-banner'>🔒 عذراً، هذا البث المباشر مخصص **للمشتركين فقط** داخل المنصة. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
             st.info("لا يوجد بث مباشر نشط حالياً من هذا الأستاذ.")
     except:
@@ -543,7 +565,7 @@ def render_top_complaint_section(phone, name, role):
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
 st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر الداخلي الصرف</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية والبث المباشر بالكاميرا الحية داخل التطبيق</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
     st.markdown('<div class="classic-box">', unsafe_allow_html=True)
@@ -837,7 +859,7 @@ else:
 
             if is_active_sub:
                 st.markdown(f"<div class='success-badge'>🎉 أنت مشترك بنشاط مع الأستاذ: {t_name}</div>", unsafe_allow_html=True)
-                room_tab, live_tab, chat_tab, exam_tab, hw_tab = st.tabs(["📚 محتوى الأستاذ", "📡 البث المباشر الداخلي", "💬 الشات الفوري", "📝 الامتحانات", "📋 الواجبات"])
+                room_tab, live_tab, chat_tab, exam_tab, hw_tab = st.tabs(["📚 محتوى الأستاذ", "📡 البث المباشر بالكاميرا", "💬 الشات الفوري", "📝 الامتحانات", "📋 الواجبات"])
                 
                 with room_tab:
                     display_student_media(t_ph, st.session_state.user_phone, is_subscriber=True)
@@ -906,7 +928,7 @@ else:
 
         st.write("---")
         tab_posts, tab_live_ctrl, tab_subs, tab_chats, tab_exams, tab_hw, tab_hw_sub = st.tabs([
-            "📌 المنشورات", "📡 البث المباشر الداخلي", "👥 الاشتراكات", "💬 الشات", "📝 امتحان", "📋 واجب", "📥 حلول الطلاب"
+            "📌 المنشورات", "📡 البث المباشر بالكاميرا", "👥 الاشتراكات", "💬 الشات", "📝 امتحان", "📋 واجب", "📥 حلول الطلاب"
         ])
         
         with tab_posts:
@@ -933,35 +955,29 @@ else:
                     except:
                         pass
         with tab_live_ctrl:
-            st.markdown("### إدارة البث المباشر (داخلي بالكامل)")
-            st.markdown("قم برفع فيديو البث المباشر من جهازك مباشرة ليتم تشغيله حصرياً للطلاب المشتركين من داخل التطبيق دون أي روابط خارجية.")
+            st.markdown("### إدارة البث المباشر بالكاميرا الحية")
+            st.markdown("يمكن للأستاذ تشغيل الكاميرا مباشرة من اللابتوب أو الهاتف ليظهر صوته وصورته للطلاب داخل التطبيق فقط، مع إمكانية تحديد ما إذا كان البث (للمشتركين فقط) أو (للجميع).")
             
             render_live_broadcast_section(t_phone, is_subscriber=True, is_teacher_owner=True)
             
             with st.form("live_ctrl_form"):
-                live_title = st.text_input("عنوان البث المباشر:")
-                live_file_upload = st.file_uploader("رفع فيديو البث المباشر:", type=["mp4", "mkv", "avi"])
+                live_title = st.text_input("عنوان غرفة البث المباشر:")
+                live_vis = st.selectbox("من يمكنه مشاهدة البث؟", ["subscriber", "public"], format_func=lambda x: "مشتركون فقط" if x=="subscriber" else "للجميع")
                 countdown_hrs = st.number_input("مدة العد التنازلي لإغلاق البث (بالساعات):", min_value=0, value=3)
-                is_live_on = st.checkbox("تشغيل البث المباشر الآن للطلاب")
+                is_live_on = st.checkbox("فتح الغرفة وبدء البث الحي الآن")
                 
-                if st.form_submit_button("بدء وبث المحاضرة داخل التطبيق"):
-                    final_media_path = ""
-                    if live_file_upload:
-                        final_media_path = os.path.join(MEDIA_DIR, live_file_upload.name)
-                        with open(final_media_path, "wb") as f:
-                            f.write(live_file_upload.getbuffer())
-                            
+                if st.form_submit_button("حفظ إعدادات البث وبدء الغرفة"):
                     t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     active_val = 1 if is_live_on else 0
                     try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
-                            c.execute("""INSERT INTO live_broadcasts (teacher_phone, title, file_path, is_active, countdown_hours, started_at) 
+                            c.execute("""INSERT INTO live_broadcasts (teacher_phone, title, is_active, visibility, countdown_hours, started_at) 
                                        VALUES (?, ?, ?, ?, ?, ?)
-                                       ON CONFLICT(teacher_phone) DO UPDATE SET title=?, file_path=?, is_active=?, countdown_hours=?, started_at=?""",
-                                      (t_phone, live_title, final_media_path, active_val, countdown_hrs, t_now, live_title, final_media_path, active_val, countdown_hrs, t_now))
+                                       ON CONFLICT(teacher_phone) DO UPDATE SET title=?, is_active=?, visibility=?, countdown_hours=?, started_at=?""",
+                                      (t_phone, live_title, active_val, live_vis, countdown_hrs, t_now, live_title, active_val, live_vis, countdown_hrs, t_now))
                             conn.commit()
-                        st.success("تم تشغيل البث المباشر بنجاح داخل التطبيق!")
+                        st.success("تم تحديث إعدادات البث المباشر وبدء الغرفة بنجاح!")
                         st.rerun()
                     except:
                         pass
