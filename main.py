@@ -21,7 +21,7 @@ st.markdown("""
     
     .block-container {
         max-width: 600px !important;
-        padding-top: 1.5rem !important;
+        padding-top: 1.0rem !important;
         padding-bottom: 2rem !important;
     }
     
@@ -77,6 +77,14 @@ st.markdown("""
         font-size: 15px !important;
         margin: 12px 0 !important;
         border: 1px solid #10b981 !important;
+    }
+    
+    .top-complaint-box {
+        background: #fff1f2 !important;
+        border: 1px solid #fda4af !important;
+        border-radius: 16px;
+        padding: 15px;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -434,23 +442,25 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
                     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def render_complaint_section(phone, name, role):
-    st.markdown("---")
-    st.subheader("📢 إرسال شكوى أو بلاغ للمطور")
-    with st.form("complaint_form", clear_on_submit=True):
-        c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ:")
-        c_submit = st.form_submit_button("إرسال الشكوى للمطور")
-        if c_submit and c_text:
-            t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            try:
-                with sqlite3.connect(DB_NAME) as conn:
-                    c = conn.cursor()
-                    c.execute("INSERT INTO complaints (sender_phone, sender_name, role, complaint_text, timestamp) VALUES (?, ?, ?, ?, ?)",
-                              (phone, name, role, c_text, t_now))
-                    conn.commit()
-                st.success("تم إرسال شكواك بنجاح للمطور وسيتم مراجعتها فوراً.")
-            except:
-                st.error("حدث خطأ أثناء الإرسال.")
+def render_top_complaint_section(phone, name, role):
+    with st.expander("📢 إرسال شكوى أو بلاغ للمطور (اضغط هنا)", expanded=False):
+        st.markdown("<div class='top-complaint-box'>", unsafe_allow_html=True)
+        with st.form("top_complaint_form", clear_on_submit=True):
+            st.markdown("<b>إرسال شكوى مباشرة للإدارة والمطور:</b>", unsafe_allow_html=True)
+            c_text = st.text_area("اكتب تفاصيل الشكوى أو البلاغ هنا:")
+            c_submit = st.form_submit_button("إرسال الشكوى فوراً")
+            if c_submit and c_text:
+                t_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                try:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        c.execute("INSERT INTO complaints (sender_phone, sender_name, role, complaint_text, timestamp) VALUES (?, ?, ?, ?, ?)",
+                                  (phone, name, role, c_text, t_now))
+                        conn.commit()
+                    st.success("تم إرسال شكواك بنجاح للمطور وسيتم مراجعتها فوراً.")
+                except:
+                    st.error("حدث خطأ أثناء الإرسال.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 7. الواجهة الرئيسية
@@ -660,6 +670,28 @@ else:
     t_phone = st.session_state.user_phone if st.session_state.user_role == "أستاذ" else None
     room_id = f"room_{t_phone}" if t_phone else None
 
+    # عرض قسم الشكاوى والبلاغات في أعلى الصفحة تماماً على اليمين للمستخدم المسجل
+    if st.session_state.user_role == "طالب":
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT name FROM users WHERE phone=?", (st.session_state.user_phone,))
+                r_st = c.fetchone()
+                st_name_val = r_st[0] if r_st else "طالب"
+            render_top_complaint_section(st.session_state.user_phone, st_name_val, "طالب")
+        except:
+            pass
+    elif st.session_state.user_role == "أستاذ":
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("SELECT name FROM teachers WHERE phone=?", (t_phone,))
+                t_row_c = c.fetchone()
+                t_name_val = t_row_c[0] if t_row_c else "أستاذ"
+            render_top_complaint_section(t_phone, t_name_val, "أستاذ")
+        except:
+            pass
+
     if st.session_state.user_role == "طالب":
         if st.button("🚪 تسجيل الخروج"):
             logout_user()
@@ -677,16 +709,6 @@ else:
                     render_student_teacher_card(t_name, t_sub, t_price, r_id, t_ph, st.session_state.user_phone)
             else:
                 st.info("لا يوجد أساتذة متاحين حالياً.")
-        except:
-            pass
-
-        try:
-            with sqlite3.connect(DB_NAME) as conn:
-                c = conn.cursor()
-                c.execute("SELECT name FROM users WHERE phone=?", (st.session_state.user_phone,))
-                r_st = c.fetchone()
-                st_name_val = r_st[0] if r_st else "طالب"
-            render_complaint_section(st.session_state.user_phone, st_name_val, "طالب")
         except:
             pass
 
@@ -884,8 +906,6 @@ else:
                     st.info("لا توجد طلاب مشتركين حالياً لبدء الشات معهم.")
             except:
                 pass
-
-        render_complaint_section(t_phone, t_name, "أستاذ")
 
     elif st.session_state.user_role == "مطور":
         if st.button("🚪 تسجيل الخروج"):
