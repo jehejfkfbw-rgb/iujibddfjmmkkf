@@ -6,9 +6,9 @@ import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# 1. إعدادات التصميم العصري الفاخر (Glassmorphism & Neon UI)
+# 1. إعدادات التصميم الكلاسيكي القديم (Light Theme)
 # ==========================================
-st.set_page_config(page_title="منصة نوفا التعليمية المتطورة", page_icon="🚀", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="📚", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -26,92 +26,68 @@ st.markdown("""
     .stApp {
         direction: rtl;
         text-align: right;
-        background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #090d16 100%) !important;
-        color: #f1f5f9 !important;
-        font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, sans-serif !important;
     }
     
     h1, h2, h3, h4 {
-        color: #c084fc !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.5px;
+        color: #1f2937 !important;
+        font-weight: bold !important;
     }
     
-    /* تصميم الحاويات الزجاجية المودرن */
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7) !important;
-        backdrop-filter: blur(16px) !important;
-        -webkit-backdrop-filter: blur(16px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 24px !important;
-        padding: 24px !important;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-        margin-bottom: 20px !important;
-        transition: transform 0.3s ease;
+    /* تصميم الصناديق الكلاسيكية البسيطة */
+    .classic-box {
+        background-color: #f9fafb !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 6px !important;
+        padding: 15px !important;
+        margin-bottom: 15px !important;
     }
     
-    .glass-card:hover {
-        border-color: rgba(192, 132, 252, 0.3) !important;
-    }
-    
-    /* الحقول الإدخالية */
+    /* الحقول الإدخالية العادية */
     .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea {
-        background-color: rgba(15, 23, 42, 0.6) !important;
-        color: #ffffff !important;
-        border: 1px solid #334155 !important;
-        border-radius: 16px !important;
-        padding: 14px !important;
-        font-size: 15px !important;
-        transition: all 0.3s ease;
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        border: 1px solid #9ca3af !important;
+        border-radius: 4px !important;
+        padding: 8px !important;
     }
     
-    .stTextInput input:focus, .stPasswordInput input:focus, .stTextArea textarea:focus {
-        border-color: #a855f7 !important;
-        box-shadow: 0 0 15px rgba(168, 85, 247, 0.3) !important;
-    }
-    
-    /* الأزرار العصرية المضيئة */
+    /* الأزرار التقليدية البسيطة */
     .stButton>button {
-        background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%) !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 16px !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        padding: 14px 24px !important;
+        background-color: #f3f4f6 !important;
+        color: #1f2937 !important;
+        border: 1px solid #9ca3af !important;
+        border-radius: 4px !important;
+        font-weight: bold !important;
+        padding: 8px 16px !important;
         width: 100% !important;
-        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .stButton>button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 30px rgba(139, 92, 246, 0.6) !important;
-        filter: brightness(1.1);
+        background-color: #e5e7eb !important;
+        border-color: #4b5563 !important;
     }
     
     .cash-banner {
-        background: linear-gradient(135deg, #431407 100%, #7c2d12 0%) !important;
-        color: #ffedd5 !important;
-        padding: 20px !important;
-        border-radius: 20px !important;
+        background-color: #fffbeb !important;
+        color: #92400e !important;
+        padding: 12px !important;
+        border-radius: 4px !important;
         text-align: center !important;
-        font-weight: bold !important;
-        border: 1px solid #ea580c !important;
-        box-shadow: 0 10px 25px rgba(234, 88, 12, 0.2) !important;
-        margin: 15px 0 !important;
+        border: 1px solid #f59e0b !important;
+        margin: 10px 0 !important;
     }
     
     .success-badge {
-        background: linear-gradient(135deg, #064e3b 0%, #065f46 100%) !important;
-        color: #a7f3d0 !important;
-        padding: 18px !important;
-        border-radius: 20px !important;
+        background-color: #ecfdf5 !important;
+        color: #065f46 !important;
+        padding: 12px !important;
+        border-radius: 4px !important;
         border: 1px solid #10b981 !important;
-        font-weight: bold !important;
         text-align: center !important;
-        margin: 15px 0 !important;
-        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2) !important;
+        margin: 10px 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -320,8 +296,8 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
             
         if chats:
             for s_role, s_msg, s_time in reversed(chats):
-                bg_color = "#6d28d9" if s_role == "أستاذ" else "#1e293b"
-                st.markdown(f"<div style='background: {bg_color}; color: #fff; padding: 12px 16px; border-radius: 14px; margin-bottom: 8px;'><small style='color: #cbd5e1;'>[{s_time}] <b>{s_role}:</b></small><br>{s_msg}</div>", unsafe_allow_html=True)
+                bg_color = "#e0e7ff" if s_role == "أستاذ" else "#f3f4f6"
+                st.markdown(f"<div style='background: {bg_color}; color: #000; padding: 10px; border-radius: 4px; margin-bottom: 6px; border: 1px solid #d1d5db;'><small style='color: #4b5563;'>[{s_time}] <b>{s_role}:</b></small><br>{s_msg}</div>", unsafe_allow_html=True)
         else:
             st.info("لا توجد رسائل سابقة.")
     except:
@@ -330,7 +306,7 @@ def render_smart_chat(teacher_phone, student_phone, current_user_role):
 @st.fragment
 def render_live_broadcast_section(teacher_phone, is_subscriber=False):
     st_autorefresh(interval=3000, key=f"live_broadcast_ref_{teacher_phone}")
-    st.subheader("📡 نظام البث المباشر (صوت وصورة حصري)")
+    st.subheader("📡 نظام البث المباشر")
 
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -354,9 +330,9 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False):
                         if diff_sec > 0:
                             hrs_left = int(diff_sec // 3600)
                             mins_left = int((diff_sec % 3600) // 60)
-                            st.warning(f"⏳ تنبيه العد التنازلي: سيتم استخراجك وإغلاق الغرفة المباشرة خلال: **{hrs_left} ساعة و {mins_left} دقيقة**.")
+                            st.warning(f"⏳ تنبيه العد التنازلي: سيتم إغلاق الغرفة المباشرة خلال: **{hrs_left} ساعة و {mins_left} دقيقة**.")
                         else:
-                            st.error("⚠️ انتهى الوقت المخصص لجلسة البث المباشر. تم إغلاق الغرفة.")
+                            st.error("⚠️ انتهى الوقت المخصص لجلسة البث المباشر.")
                             return
                     except:
                         pass
@@ -364,9 +340,9 @@ def render_live_broadcast_section(teacher_phone, is_subscriber=False):
                 if m_url:
                     st.video(m_url)
                 else:
-                    st.info("الأستاذ يبث الصوت والصورة حالياً.")
+                    st.info("الأستاذ يبث حالياً.")
             else:
-                st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط**. غير المشترك لا يظهر له أي محتوى مباشر. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
+                st.markdown("<div class='cash-banner'>🔒 عذراً، البث المباشر متاح **للمشتركين فقط**. يرجى الاشتراك للوصول!</div>", unsafe_allow_html=True)
         else:
             st.info("لا يوجد بث مباشر نشط حالياً.")
     except:
@@ -568,16 +544,16 @@ def render_top_complaint_section(phone, name, role):
 # ==========================================
 # 5. الواجهة الرئيسية (Login & Dashboards)
 # ==========================================
-st.markdown("<h1 style='text-align: center; font-size: 2.5rem;'>⚡ منصة نوفا التعليمية</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #a5b4fc; margin-bottom: 30px;'>الجيل الجديد لإدارة الدروس الخصوصية والمحتوى الحصري</p>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>منصة نوفا التعليمية</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4b5563; margin-bottom: 20px;'>نظام إدارة الدروس الخصوصية</p>", unsafe_allow_html=True)
 
 if not st.session_state.is_logged_in:
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown('<div class="classic-box">', unsafe_allow_html=True)
     role_choice = st.radio("اختر نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
     if role_choice == "طالب 👨‍🎓":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="classic-box">', unsafe_allow_html=True)
         student_mode = st.radio("العملية:", ["تسجيل دخول", "حساب جديد", "نسيت كلمة المرور؟"], horizontal=True)
         st.write("---")
         
@@ -654,7 +630,7 @@ if not st.session_state.is_logged_in:
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif role_choice == "أستاذ 👨‍🏫":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="classic-box">', unsafe_allow_html=True)
         teacher_mode = st.radio("العملية:", ["دخول الأستاذ", "حساب أستاذ جديد", "نسيت كلمة المرور؟"], horizontal=True)
         st.write("---")
         
@@ -733,7 +709,7 @@ if not st.session_state.is_logged_in:
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif role_choice == "مطور 👑":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<div class="classic-box">', unsafe_allow_html=True)
         with st.form("dev_reg"):
             st.subheader("دخول المطور التنفيذي")
             dev_code = st.text_input("كود المطور السري:", type="password")
@@ -801,7 +777,7 @@ else:
                 
                 if teachers:
                     for t_name, t_sub, t_price, r_id, t_ph, t_rat in teachers:
-                        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                        st.markdown('<div class="classic-box">', unsafe_allow_html=True)
                         col_info, col_btn = st.columns([3, 1])
                         col_info.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
                         col_info.write(f"**المادة:** {t_sub} | **السعر:** {t_price} جنيه | التقييم: ⭐ {t_rat}")
@@ -885,7 +861,7 @@ else:
                         pass
             else:
                 st.markdown(f"### اشتراك مع الأستاذ: {t_name} ({t_sub})")
-                st.markdown(f"<div class='cash-banner'>للاشتراك وفتح المحتوى الحصري، حول مبلغ <b>{t_price} جنيه</b> عبر فودافون / أورانج كاش على الرقم:<br><h3 style='color: #fb923c; margin: 6px 0;'>01200000000</h3></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='cash-banner'>للاشتراك وفتح المحتوى الحصري، حول مبلغ <b>{t_price} جنيه</b> عبر فودافون / أورانج كاش على الرقم:<br><h3 style='margin: 6px 0;'>01200000000</h3></div>", unsafe_allow_html=True)
                 
                 if sub_status == 'pending':
                     st.warning("⏳ طلب اشتراكك قيد المراجعة حالياً من قِبل الأستاذ.")
