@@ -79,6 +79,18 @@ st.markdown("""
         border: 1px solid #10b981 !important;
     }
     
+    .ad-banner {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+        border: 2px dashed #f59e0b !important;
+        color: #92400e !important;
+        padding: 15px !important;
+        border-radius: 16px !important;
+        text-align: center !important;
+        font-weight: bold !important;
+        margin: 15px 0 !important;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+    }
+    
     .top-complaint-box {
         background: #fff1f2 !important;
         border: 1px solid #fda4af !important;
@@ -115,7 +127,7 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'pending', requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', show_ads INTEGER DEFAULT 1, postal_visa_info TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
@@ -176,6 +188,13 @@ def logout_user():
     st.session_state.user_phone = ""
     st.session_state.user_role = None
     st.query_params.clear()
+
+def render_ad_banner():
+    st.markdown("""
+    <div class="ad-banner">
+        📢 إعلان ممول: احصل على أفضل كورسات البرمجة والذكاء الاصطناعي مع خصومات خاصة لمنصة نوفا! (مكان إعلاني مخصص لأرباحك)
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # 4. الشات الذكي بين الأستاذ والطالب
@@ -254,8 +273,12 @@ def render_student_exams(teacher_phone):
 # 6. عرض المحتوى والتحكم
 # ==========================================
 @st.fragment
-def display_student_media(teacher_phone, student_phone):
+def display_student_media(teacher_phone, student_phone, show_ads):
     st_autorefresh(interval=2000, key=f"refresh_media_{teacher_phone}")
+    
+    if show_ads:
+        render_ad_banner()
+
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
@@ -322,29 +345,46 @@ def display_teacher_requests(teacher_phone):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT student_phone, status, requested_at, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT student_phone, status, show_ads, postal_visa_info, requested_at, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
                 now = datetime.datetime.now()
-                for s_ph, status, req_at, expires_at in subs:
+                for s_ph, status, current_ads_setting, postal_info, req_at, expires_at in subs:
                     c.execute("SELECT name, age, grade FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
-                    st.markdown(f"🎓 **{st_display_name}** | هاتف المحفظة المحول منه: `{s_ph}` | الحالة: **{status}**")
+                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | حالة الاشتراك: **{status}**")
+                    st.markdown(f"💳 **بيانات فيزا البريد المصري للطالب (للتحويل عليها):** `{postal_info or 'غير متوفرة'}`")
                     
-                    col_act1, col_act2 = st.columns(2)
-                    if status != 'active':
-                        if col_act1.button(f"✅ قبول الاشتراك", key=f"acc_{s_ph}"):
+                    with st.form(f"sub_manage_form_{s_ph}"):
+                        ads_option = st.radio(
+                            "نظام الإعلانات لهذا الطالب المشترك:", 
+                            ["إظهار الإعلانات للطالب (مع إعلانات)", "إخفاء الإعلانات نهائياً (بدون إعلانات - مشترك مميز)"],
+                            index=0 if current_ads_setting == 1 else 1,
+                            key=f"ads_rad_{s_ph}"
+                        )
+                        
+                        col_act1, col_act2 = st.columns(2)
+                        acc_btn = col_act1.form_submit_button("✅ قبول / تحديث الاشتراك")
+                        ref_btn = col_act2.form_submit_button("❌ حذف / رفض")
+                        
+                        if acc_btn:
+                            new_ads_val = 1 if "مع إعلانات" in ads_option else 0
                             exp_time = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-                            c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", (exp_time, s_ph, teacher_phone))
+                            c.execute("UPDATE subscriptions SET status='active', show_ads=?, expires_at=? WHERE student_phone=? AND teacher_phone=?", 
+                                      (new_ads_val, exp_time, s_ph, teacher_phone))
                             conn.commit()
+                            st.success("تم تحديث حالة اشتراك الطالب ونظام الإعلانات بنجاح!")
                             st.rerun()
-                    if col_act2.button(f"❌ حذف/رفض", key=f"ref_{s_ph}"):
-                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
-                        conn.commit()
-                        st.rerun()
+                            
+                        if ref_btn:
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
+                            conn.commit()
+                            st.success("تم حذف الطلب!")
+                            st.rerun()
+                            
                     st.write("---")
             else:
                 st.info("لا توجد طلبات اشتراك حالياً.")
@@ -364,14 +404,15 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+            c.execute("SELECT status, show_ads, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                       (student_phone, t_phone))
             sub_info = c.fetchone()
     except:
         pass
 
     sub_status = sub_info[0] if sub_info else None
-    expires_at = sub_info[1] if sub_info else None
+    show_ads_setting = sub_info[1] if sub_info and len(sub_info) > 1 else 1
+    expires_at = sub_info[2] if sub_info and len(sub_info) > 2 else None
 
     is_expired = False
     if expires_at and sub_status == 'active':
@@ -383,7 +424,10 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             pass
 
     if sub_status == 'active' and not is_expired:
-        st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان)")
+        if show_ads_setting == 1:
+            st.success("✅ أنت مشترك مع هذا الأستاذ (البث والمحتوى متاحان - تظهر إعلانات حسب رغبة الأستاذ)")
+        else:
+            st.success("⭐ أنت مشترك مميز مع هذا الأستاذ (البث والمحتوى متاحان - بدون إعلانات نهائياً!)")
         
         if st.button("❌ إلغاء الاشتراك", key=f"cancel_sub_{t_phone}"):
             with sqlite3.connect(DB_NAME) as conn:
@@ -394,6 +438,8 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
 
         tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
         with tab_live:
+            if show_ads_setting == 1:
+                render_ad_banner()
             stream_html = f"""
             <iframe src="https://vdo.ninja/?view={room_id}&autostart=1" 
                     style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
@@ -403,7 +449,7 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             components.html(stream_html, height=320)
             
         with tab_media:
-            display_student_media(t_phone, student_phone)
+            display_student_media(t_phone, student_phone, show_ads=(show_ads_setting == 1))
             
         with tab_exams:
             render_student_exams(t_phone)
@@ -412,33 +458,35 @@ def render_student_teacher_card(t_name, t_sub, t_price, room_id, t_phone, studen
             render_smart_chat(t_phone, student_phone, "طالب")
             
     else:
-        st.info("⚠️ غير مشترك. يرجى التحويل وإرسال رقم المحفظة المحول منها للانضمام:")
+        st.info("⚠️ غير مشترك. يرجى إدخال بيانات فيزا البريد المصري الخاصة بك لإرسال طلب الاشتراك:")
+        render_ad_banner()
+        
         st.markdown(f"""
         <div class="cash-box">
-            تحويل مبلغ ({t_price} جـ) على محفظة فودافون كاش أو إنستاباي: <b>01213783090</b>
+            قيمة الاشتراك ({t_price} جـ). يرجى إدخال تفاصيل فيزا البريد المصري (رقم الكارت أو الحساب) ليتمكن الأستاذ من مراجعة التحويل:
         </div>
         """, unsafe_allow_html=True)
         
-        with st.form(f"cash_pay_form_{t_phone}"):
-            cash_phone_used = st.text_input("أدخل رقم المحمول الذي قمت بالتحويل منه:", value=student_phone)
+        with st.form(f"postal_pay_form_{t_phone}"):
+            postal_info_input = st.text_input("أدخل رقم فيزا البريد المصري أو بيانات الحساب المحول منه:")
             pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ")
             
             if pay_btn:
-                if cash_phone_used:
+                if postal_info_input:
                     t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
-                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (cash_phone_used, t_phone))
-                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, requested_at) VALUES (?, ?, 'pending', ?)",
-                                      (cash_phone_used, t_phone, t_now_str))
+                            c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (student_phone, t_phone))
+                            c.execute("INSERT INTO subscriptions (student_phone, teacher_phone, status, show_ads, postal_visa_info, requested_at) VALUES (?, ?, 'pending', 1, ?, ?)",
+                                      (student_phone, t_phone, postal_info_input, t_now_str))
                             conn.commit()
-                        st.success("تم إرسال طلب الاشتراك بنجاح! في انتظار موافقة الأستاذ.")
+                        st.success("تم إرسال طلب الاشتراك وبيانات فيزا البريد بنجاح! في انتظار موافقة الأستاذ.")
                         st.rerun()
                     except:
                         pass
                 else:
-                    st.error("الرجاء إدخال رقم المحمول المحول منه!")
+                    st.error("الرجاء إدخال بيانات فيزا البريد المصري بشكل صحيح!")
                     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -670,7 +718,6 @@ else:
     t_phone = st.session_state.user_phone if st.session_state.user_role == "أستاذ" else None
     room_id = f"room_{t_phone}" if t_phone else None
 
-    # عرض قسم الشكاوى والبلاغات في أعلى الصفحة تماماً على اليمين للمستخدم المسجل
     if st.session_state.user_role == "طالب":
         try:
             with sqlite3.connect(DB_NAME) as conn:
@@ -731,10 +778,11 @@ else:
         st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
         
         tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
-            "🔴 البث", "👥 الطلبات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
+            "🔴 البث", "👥 الطلبات والتحكم بالإعلانات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
         ])
 
         with tab_broadcast:
+            render_ad_banner()
             st.markdown("### إدارة البث المباشر والشات العام")
             stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&autostart=1" 
