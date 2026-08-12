@@ -92,7 +92,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. إعداد قاعدة البيانات والجداول
+# 2. إعداد قاعدة البيانات والجداول (مع ضمان التحديث التلقائي للأعمدة)
 # ==========================================
 MEDIA_DIR = "uploaded_media"
 if not os.path.exists(MEDIA_DIR):
@@ -119,6 +119,12 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
             status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
+        # التأكد من وجود عمود orange_cash_sender حتى لو الجدول قديم
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN orange_cash_sender TEXT")
+        except:
+            pass
+
         c.execute('''CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_phone TEXT, title TEXT,
             media_type TEXT, file_path TEXT, status TEXT DEFAULT 'approved', views_count INTEGER DEFAULT 0)''')
@@ -760,7 +766,6 @@ else:
                             try:
                                 with sqlite3.connect(DB_NAME) as conn:
                                     c = conn.cursor()
-                                    # إدخال الطلب أو استبداله لضمان نجاح العملية فوراً
                                     c.execute("""INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) 
                                                VALUES (?, ?, 'pending', ?, ?)""",
                                               (st.session_state.user_phone, t_phone_val, orange_sender_input, t_now_str))
