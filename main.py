@@ -126,10 +126,15 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, entry_expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, student_educational_stage TEXT, requested_at TEXT, expires_at TEXT, entry_expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         try:
             c.execute("ALTER TABLE subscriptions ADD COLUMN orange_cash_sender TEXT")
+        except:
+            pass
+
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN student_educational_stage TEXT")
         except:
             pass
 
@@ -368,38 +373,36 @@ def display_teacher_requests(teacher_phone):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            # جلب الطلبات التي ما زالت في حالة pending فقط، أو المشتركة المعلقة
-            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at, entry_expires_at FROM subscriptions WHERE teacher_phone=? AND status='pending'", (teacher_phone,))
+            c.execute("SELECT student_phone, status, orange_cash_sender, student_educational_stage, requested_at, expires_at, entry_expires_at FROM subscriptions WHERE teacher_phone=? AND status='pending'", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
                 now = datetime.datetime.now()
-                for s_ph, status, orange_sender, req_at, expires_at, entry_exp in subs:
+                for s_ph, status, orange_sender, st_stage, req_at, expires_at, entry_exp in subs:
                     c.execute("SELECT name FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
-                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | الحالة: **قيد المراجعة ⏳**")
+                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | المرحلة: **{st_stage or 'غير محددة'}**")
                     st.markdown(f"💳 **رقم أورانج كاش المحول منه:** `{orange_sender or 'غير متوفر'}` | وقت الطلب: `{req_at}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
-                        st.markdown("<b>إعدادات الموافقة والوقت:</b>", unsafe_allow_html=True)
+                        st.markdown("<b>إعدادات تحديد المواعيد والموافقة:</b>", unsafe_allow_html=True)
                         sub_days = st.number_input("مدة صلوحية الاشتراك (بالأيام):", min_value=1, value=30, key=f"days_{s_ph}")
-                        entry_minutes = st.number_input("عداد تنازلي لدخول القاعة (بالدقائق):", min_value=1, value=10, key=f"mins_{s_ph}")
+                        entry_minutes = st.number_input("العداد التنازلي المخصص لدخول القاعة (بالدقائق):", min_value=1, value=15, key=f"mins_{s_ph}")
                         
                         col_act1, col_act2 = st.columns(2)
-                        acc_btn = col_act1.form_submit_button("✅ قبول وتحديد الوقت")
+                        acc_btn = col_act1.form_submit_button("✅ قبول وتحديد المواعيد والوقت")
                         ref_btn = col_act2.form_submit_button("❌ إلغاء / رفض الطلب")
                         
                         if acc_btn:
                             exp_sub_time = (now + datetime.timedelta(days=sub_days)).strftime("%Y-%m-%d %H:%M:%S")
                             entry_exp_time = (now + datetime.timedelta(minutes=entry_minutes)).strftime("%Y-%m-%d %H:%M:%S")
                             
-                            # تحويل الحالة إلى active وتحديث التواريخ (تختفي فوراً من الطلبات المعلقة وتتحول لاشتراك نشط)
                             c.execute("UPDATE subscriptions SET status='active', expires_at=?, entry_expires_at=? WHERE student_phone=? AND teacher_phone=?", 
                                       (exp_sub_time, entry_exp_time, s_ph, teacher_phone))
                             conn.commit()
-                            st.success("تم قبول الطالب وتحديد مهلة الدخول ومدة الاشتراك بنجاح!")
+                            st.success("تم قبول الطالب وتحديد مواعيد وقته بنجاح!")
                             st.rerun()
                             
                         if ref_btn:
@@ -412,7 +415,6 @@ def display_teacher_requests(teacher_phone):
             else:
                 st.info("لا توجد طلبات اشتراك معلقة جديدة حالياً.")
                 
-            # عرض الطلاب المشتركين الفعليين حالياً مع زر لإلغاء الاشتراك إذا أراد الأستاذ
             st.markdown("### 👥 الطلاب المشتركين الفعّالين لديك:")
             c.execute("SELECT student_phone, expires_at FROM subscriptions WHERE teacher_phone=? AND status='active'", (teacher_phone,))
             active_subs = c.fetchall()
@@ -818,8 +820,8 @@ else:
 
                 st.markdown(f"""
                 <div class="success-alert">
-                    🎉 تم قبول اشتراكك بنجاح!<br>
-                    ⏳ الوقت المتبقي للدخول لقاعة الأستاذ قبل انتهاء المهلة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
+                    🎉 تم قبول اشتراكك بنجاح من الأستاذ!<br>
+                    ⏳ الموعد والوقت المتبقي لدخول القاعة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -854,7 +856,7 @@ else:
             elif sub_status == 'pending':
                 st.markdown("""
                 <div class="success-alert">
-                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار قبول الطلب وتحديد مدة الاشتراك ووقت الدخول.
+                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ لتحديد مواعيدك وقبولك!
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -877,31 +879,32 @@ else:
                 
                 st.markdown(f"""
                 <div class="cash-box">
-                    مطلوب تحويل مبلغ ({t_price_val} جـ) على رقم أورانج كاش الآتي: <br>
+                    أهلاً بك! قبل إرسال طلب الاشتراك، يرجى اختيار مرحلتك الدراسية وتحويل مبلغ ({t_price_val} جـ) على أورانج كاش الآتي: <br>
                     <span style="font-size: 20px; color: #4f46e5;">{fixed_orange_number}</span><br>
-                    ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه واضغط إرسال طلب الاشتراك:
+                    ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه واضغط إرسال طلب الاشتراك للأستاذ:
                 </div>
                 """, unsafe_allow_html=True)
                 
                 with st.form(f"orange_pay_form_{t_phone_val}"):
+                    student_stage_input = st.selectbox("حدد مرحلتك الدراسية عند دخولك:", ["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"])
                     orange_sender_input = st.text_input("اكتب رقم أورانج كاش الذي حوّلت منه:")
                     pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ ⚡")
                     
                     if pay_btn:
-                        if orange_sender_input:
+                        if orange_sender_input and student_stage_input:
                             t_now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             try:
                                 with sqlite3.connect(DB_NAME) as conn:
                                     c = conn.cursor()
-                                    c.execute("""INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, requested_at) 
-                                               VALUES (?, ?, 'pending', ?, ?)""",
-                                              (st.session_state.user_phone, t_phone_val, orange_sender_input, t_now_str))
+                                    c.execute("""INSERT OR REPLACE INTO subscriptions (student_phone, teacher_phone, status, orange_cash_sender, student_educational_stage, requested_at) 
+                                               VALUES (?, ?, 'pending', ?, ?, ?)""",
+                                              (st.session_state.user_phone, t_phone_val, orange_sender_input, student_stage_input, t_now_str))
                                     conn.commit()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"خطأ في إرسال الطلب: {e}")
                         else:
-                            st.error("الرجاء إدخال رقم أورانج كاش المحول منه!")
+                            st.error("الرجاء اختيار المرحلة الدراسية وإدخال رقم أورانج كاش المحول منه!")
 
     elif st.session_state.user_role == "أستاذ":
         if st.button("🚪 تسجيل الخروج"):
@@ -964,7 +967,7 @@ else:
                 pass
 
         with tab_subs:
-            st.markdown("### 📥 الطلبات الواردة وإدارة الطلاب المشتركين")
+            st.markdown("### 📥 الطلبات الواردة وتحديد المواعيد وقبول الطلاب")
             display_teacher_requests(t_phone)
 
         with tab_upload:
