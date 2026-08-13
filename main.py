@@ -138,7 +138,7 @@ def init_db():
 
     c.execute("""CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT, subject_name TEXT,
-            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, student_educational_stage TEXT, requested_at TEXT, expires_at TEXT, entry_expires_at TEXT, UNIQUE(student_phone, teacher_phone, subject_name))""")
+            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, student_educational_stage TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone, subject_name))""")
 
     try:
       c.execute("ALTER TABLE subscriptions ADD COLUMN subject_name TEXT")
@@ -156,11 +156,6 @@ def init_db():
       c.execute(
           "ALTER TABLE subscriptions ADD COLUMN student_educational_stage TEXT"
       )
-    except:
-      pass
-
-    try:
-      c.execute("ALTER TABLE subscriptions ADD COLUMN entry_expires_at TEXT")
     except:
       pass
 
@@ -324,9 +319,7 @@ def render_smart_chat(
             unsafe_allow_html=True,
         )
     else:
-      st.info(
-          "لا توجد رسائل سابقة في الشات الخاص لهذه المادة. ابدأ المحادثة الآن!"
-      )
+      st.info("لا توجد رسائل سابقة في الشات الخاص لهذه المادة.")
   except:
     pass
 
@@ -487,23 +480,22 @@ def display_student_media(
 
 @st.fragment
 def display_teacher_requests(teacher_phone):
-  st_autorefresh(interval=1500, key=f"refresh_subs_{teacher_phone}")
+  st_autorefresh(interval=2000, key=f"refresh_subs_{teacher_phone}")
   try:
     with sqlite3.connect(DB_NAME) as conn:
       c = conn.cursor()
 
-      # 1. الطلبات المعلقة
+      # 1. الطلبات المعلقة (قيد الانتظار)
       st.markdown("### ⏳ طلبات الاشتراك المعلقة:")
       c.execute(
           "SELECT student_phone, subject_name, status, orange_cash_sender,"
-          " student_educational_stage, requested_at, expires_at,"
-          " entry_expires_at FROM subscriptions WHERE teacher_phone=? AND"
-          " status='pending'",
+          " student_educational_stage, requested_at, expires_at FROM subscriptions"
+          " WHERE teacher_phone=? AND status='pending'",
           (teacher_phone,),
       )
-      subs = c.fetchall()
+      pending_subs = c.fetchall()
 
-      if subs:
+      if pending_subs:
         now = datetime.datetime.now()
         for (
             s_ph,
@@ -513,8 +505,7 @@ def display_teacher_requests(teacher_phone):
             st_stage,
             req_at,
             expires_at,
-            entry_exp,
-        ) in subs:
+        ) in pending_subs:
           c.execute("SELECT name FROM users WHERE phone=?", (s_ph,))
           st_data = c.fetchone()
           st_display_name = st_data[0] if st_data else s_ph
@@ -532,48 +523,33 @@ def display_teacher_requests(teacher_phone):
 
           with st.form(f"sub_manage_form_{s_ph}_{s_subj}"):
             st.markdown(
-                "<b>إعدادات تحديد المواعيد والموافقة للمادة:</b>",
+                "<b>حدد مدة الاشتراك بالأيام للموافقة على الطالب:</b>",
                 unsafe_allow_html=True,
             )
             sub_days = st.number_input(
-                "مدة صلوحية الاشتراك (بالأيام):",
+                "عدد أيام الصلاحية واشتراك الغرفة:",
                 min_value=1,
                 value=30,
                 key=f"days_{s_ph}_{s_subj}",
             )
-            entry_minutes = st.number_input(
-                "العداد التنازلي المخصص لدخول الغرفة (بالدقائق):",
-                min_value=1,
-                value=15,
-                key=f"mins_{s_ph}_{s_subj}",
-            )
 
             col_act1, col_act2 = st.columns(2)
-            acc_btn = col_act1.form_submit_button("✅ قبول وتحديد الوقت")
-            ref_btn = col_act2.form_submit_button("❌ رفض الطلب")
+            acc_btn = col_act1.form_submit_button("✅ قبول وتحديد الأيام")
+            ref_btn = col_act2.form_submit_button("❌ رفض الطلب وحذفه")
 
             if acc_btn:
               exp_sub_time = (
                   now + datetime.timedelta(days=sub_days)
               ).strftime("%Y-%m-%d %H:%M:%S")
-              entry_exp_time = (
-                  now + datetime.timedelta(minutes=entry_minutes)
-              ).strftime("%Y-%m-%d %H:%M:%S")
 
+              # تحديث حالة الطلب إلى active مع حفظ تاريخ الانتهاء (بالأيام)
               c.execute(
-                  "UPDATE subscriptions SET status='active', expires_at=?,"
-                  " entry_expires_at=? WHERE student_phone=? AND"
-                  " teacher_phone=? AND subject_name=?",
-                  (
-                      exp_sub_time,
-                      entry_exp_time,
-                      s_ph,
-                      teacher_phone,
-                      s_subj,
-                  ),
+                  "UPDATE subscriptions SET status='active', expires_at=? WHERE"
+                  " student_phone=? AND teacher_phone=? AND subject_name=?",
+                  (exp_sub_time, s_ph, teacher_phone, s_subj),
               )
               conn.commit()
-              st.success("تم قبول الطالب لهذه المادة بنجاح!")
+              st.success("تم قبول الطالب بنجاح وإضافة العداد بالأيام!")
               st.rerun()
 
             if ref_btn:
@@ -583,15 +559,15 @@ def display_teacher_requests(teacher_phone):
                   (s_ph, teacher_phone, s_subj),
               )
               conn.commit()
-              st.success("تم حذف الطلب!")
+              st.success("تم رفض الطلب وحذفه!")
               st.rerun()
 
           st.write("---")
       else:
         st.info("لا توجد طلبات اشتراك معلقة جديدة حالياً.")
 
-      # 2. الطلاب المقبولون والنشطون (مع زر إلغاء الاشتراك الدائم)
-      st.markdown("### 👥 الطلاب المقبولون والنشطون (مع زر إلغاء الاشتراك):")
+      # 2. الطلاب المقبولون والنشطون (مع عرض العداد بالأيام وزر إلغاء الاشتراك الدائم)
+      st.markdown("### 👥 الطلاب المقبولون والنشطون (مع العداد بالأيام وإلغاء الاشتراك):")
       c.execute(
           "SELECT student_phone, subject_name, expires_at FROM subscriptions"
           " WHERE teacher_phone=? AND status='active'",
@@ -605,12 +581,28 @@ def display_teacher_requests(teacher_phone):
           st_data = c.fetchone()
           st_display_name = st_data[0] if st_data else a_ph
 
+          # حساب الأيام المتبقية
+          remaining_days_str = "منتهي"
+          if a_exp:
+            try:
+              exp_dt = datetime.datetime.strptime(a_exp, "%Y-%m-%d %H:%M:%S")
+              diff = exp_dt - datetime.datetime.now()
+              days_left = diff.days
+              hours_left = diff.seconds // 3600
+              if days_left >= 0:
+                remaining_days_str = f"باقي {days_left} يوم و {hours_left} ساعة"
+              else:
+                remaining_days_str = "منتهي الصلاحية"
+            except:
+              pass
+
           st.markdown(
-              f"✅ **{a_display_name}** | المادة: <span"
-              f" class='promo-badge'>{a_subj}</span> | هاتف: `{a_ph}` | ينتهي"
-              f" في: `{a_exp}`",
+              f"✅ **{st_display_name}** | المادة: <span"
+              f" class='promo-badge'>{a_subj}</span> | هاتف: `{a_ph}`<br>"
+              f"⏳ **العداد التنازلي:** <span style='color: #4f46e5; font-weight:bold;'>{remaining_days_str}</span> (ينتهي في: `{a_exp}`)",
               unsafe_allow_html=True,
           )
+          
           if st.button(
               f"🗑️ إلغاء الاشتراك للطالب ({a_display_name} - {a_subj})",
               key=f"cancel_active_sub_{a_ph}_{a_subj}",
@@ -1062,7 +1054,7 @@ else:
         with sqlite3.connect(DB_NAME) as conn:
           c = conn.cursor()
           c.execute(
-              "SELECT status, expires_at, entry_expires_at FROM subscriptions"
+              "SELECT status, expires_at FROM subscriptions"
               " WHERE student_phone=? AND teacher_phone=? AND subject_name=?",
               (st.session_state.user_phone, t_phone_val, t_subj_val),
           )
@@ -1072,9 +1064,6 @@ else:
 
       sub_status = sub_info[0] if sub_info else None
       expires_at = sub_info[1] if sub_info and len(sub_info) > 1 else None
-      entry_expires_at = (
-          sub_info[2] if sub_info and len(sub_info) > 2 else None
-      )
 
       is_expired = False
       if expires_at and sub_status == "active":
@@ -1095,54 +1084,29 @@ else:
           pass
 
       if sub_status == "active" and not is_expired:
-        entry_expired = False
-        remaining_entry_seconds = 0
-        if entry_expires_at:
-          try:
-            entry_dt = datetime.datetime.strptime(
-                entry_expires_at, "%Y-%m-%d %H:%M:%S"
-            )
-            remaining_entry_seconds = int(
-                (entry_dt - datetime.datetime.now()).total_seconds()
-            )
-            if remaining_entry_seconds <= 0:
-              entry_expired = True
-          except:
-            pass
-
-        if entry_expired:
-          st.warning(
-              "❌ انتهى وقت مهلة الدخول المحددة من الأستاذ! تم إنهاء الاشتراك"
-              " تلقائياً."
-          )
-          try:
-            with sqlite3.connect(DB_NAME) as conn:
-              c = conn.cursor()
-              c.execute(
-                  "DELETE FROM subscriptions WHERE student_phone=? AND"
-                  " teacher_phone=? AND subject_name=?",
-                  (st.session_state.user_phone, t_phone_val, t_subj_val),
-              )
-              conn.commit()
-          except:
-            pass
-          st.session_state.inside_teacher_room = False
-          st.rerun()
+        # حساب الأيام المتبقية لعرضها للطالب
+        days_remaining_str = "جاري الحساب..."
+        try:
+          exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+          diff = exp_dt - datetime.datetime.now()
+          d_left = diff.days
+          h_left = diff.seconds // 3600
+          if d_left >= 0:
+            days_remaining_str = f"باقي {d_left} يوم و {h_left} ساعة على انتهاء اشتراكك"
+          else:
+            days_remaining_str = "انتهت فترة الاشتراك"
+        except:
+          pass
 
         st_autorefresh(
             interval=1000, key=f"countdown_timer_{t_phone_val}_{t_subj_val}"
         )
 
-        e_hours = remaining_entry_seconds // 3600
-        e_minutes = (remaining_entry_seconds % 3600) // 60
-        e_seconds = remaining_entry_seconds % 60
-        entry_timer_str = f"{e_hours:02d}:{e_minutes:02d}:{e_seconds:02d}"
-
         st.markdown(
             f"""
                 <div class="success-alert">
                     🎉 تم قبول اشتراكك بنجاح من الأستاذ!<br>
-                    ⏳ الموعد والوقت المتبقي لدخول الغرفة المستقلة للمادة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
+                    ⏳ العداد التنازلي لاشتراك الغرفة بالأيام: <b style="font-size: 18px; color: #b91c1c;">{days_remaining_str}</b>
                 </div>
                 """,
             unsafe_allow_html=True,
@@ -1192,7 +1156,7 @@ else:
         st.markdown(
             """
                 <div class="success-alert">
-                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ لتحديد مواعيدك وقبولك!
+                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ ليحدد عدد أيام اشتراكك ويقبلك!
                 </div>
                 """,
             unsafe_allow_html=True,
