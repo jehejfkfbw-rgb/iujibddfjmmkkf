@@ -1320,7 +1320,7 @@ else:
                             st.markdown(f"📞 `{a_ph}`")
                         with col_a2:
                             if st.button("حذف", key=f"del_allowed_{a_id}"):
-                                with sqlite3.connect(DB_NAME) `as conn`:
+                                with sqlite3.connect(DB_NAME) as conn:
                                     c = conn.cursor()
                                     c.execute("DELETE FROM allowed_teachers WHERE id=?", (a_id,))
                                     conn.commit()
