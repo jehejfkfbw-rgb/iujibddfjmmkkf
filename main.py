@@ -37,7 +37,7 @@ st.markdown("""
         font-weight: bold !important;
     }
     
-    .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea {
+    .stTextInput input, .stNumberInput input, .stPasswordInput input, .stTextArea textarea, .stSelectbox select {
         background-color: #f1f5f9 !important;
         color: #1e293b !important;
         border: 1px solid #cbd5e1 !important;
@@ -560,12 +560,18 @@ if not st.session_state.is_logged_in:
                 st.subheader("حساب أستاذ جديد")
                 t_name_reg = st.text_input("اسم الأستاذ:")
                 t_phone_reg = st.text_input("رقم المحمول:")
-                t_sub_reg = st.text_input("المادة الدراسية:")
+                t_sub_reg = st.selectbox("اختر المادة الدراسية الخاصة بك:", [
+                    "اللغة العربية", "اللغة الإنجليزية", "اللغة الفرنسية", 
+                    "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء", 
+                    "التاريخ", "الجغرافيا", "الفلسفة والمنطق", "العلوم", "الدراسات الاجتماعية", "مادة أخرى"
+                ])
+                t_custom_sub = st.text_input("أو اكتب المادة يدوياً إذا لم تكن في القائمة:")
                 t_secret_code = st.text_input("الكود السري (901000):", type="password")
                 t_signup_btn = st.form_submit_button("إنشاء الحساب")
                 
                 if t_signup_btn:
                     if t_secret_code.strip() == "901000" and t_phone_reg:
+                        final_subject = t_custom_sub.strip() if t_custom_sub.strip() else t_sub_reg
                         try:
                             with sqlite3.connect(DB_NAME) as conn:
                                 c = conn.cursor()
@@ -582,7 +588,7 @@ if not st.session_state.is_logged_in:
                                         hashed_t_pass = hash_password(t_secret_code)
                                         c.execute("""INSERT INTO teachers (phone, password, name, subject, grade_level, age, price, image_url, room_id, is_blocked) 
                                                    VALUES (?, ?, ?, ?, 'جميع المراحل', 30, 100.0, '', ?, 0)""", 
-                                                  (t_phone_reg, hashed_t_pass, t_name_reg, t_sub_reg, f"room_{t_phone_reg}"))
+                                                  (t_phone_reg, hashed_t_pass, t_name_reg, final_subject, f"room_{t_phone_reg}"))
                                         c.execute("INSERT OR IGNORE INTO users (phone, name, role, is_blocked) VALUES (?, ?, 'أستاذ', 0)", (t_phone_reg, t_name_reg))
                                         conn.commit()
                                         login_user(t_phone_reg, "أستاذ")
@@ -690,59 +696,76 @@ else:
             st.rerun()
 
         if st.session_state.sub_target_teacher is None:
-            st.subheader("👨‍🏫 أساتذة المنصة المتاحين")
+            st.subheader("📚 المواد والأساتذة المتاحين في المنصة")
+            
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("SELECT name, subject, price, room_id, phone FROM teachers WHERE is_blocked=0")
-                    teachers = c.fetchall()
+                    c.execute("SELECT DISTINCT subject FROM teachers WHERE is_blocked=0")
+                    subjects_rows = c.fetchall()
                 
-                if teachers:
-                    for t_name, t_sub, t_price, r_id, t_ph in teachers:
-                        st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                        col_info, col_btn = st.columns([3, 1])
-                        col_info.markdown(f"### 👨‍🏫 {t_name}")
-                        col_info.markdown(f"📖 **المادة:** {t_sub}")
-                        
-                        sub_check_status = None
-                        try:
-                            with sqlite3.connect(DB_NAME) as conn_sub:
-                                cs = conn_sub.cursor()
-                                cs.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
-                                          (st.session_state.user_phone, t_ph))
-                                s_row = cs.fetchone()
-                                if s_row:
-                                    sub_check_status = s_row[0]
-                        except:
-                            pass
-
-                        if sub_check_status == 'active':
-                            if col_btn.button("دخول لقاعة الأستاذ 🎬", key=f"btn_enter_room_{t_ph}"):
-                                st.session_state.sub_target_teacher = {
-                                    "phone": t_ph,
-                                    "name": t_name,
-                                    "subject": t_sub,
-                                    "price": t_price,
-                                    "room_id": r_id
-                                }
-                                st.session_state.inside_teacher_room = True
-                                st.rerun()
-                        elif sub_check_status == 'pending':
-                            col_btn.markdown("<span style='color:orange; font-weight:bold;'>قيد المراجعة ⏳</span>", unsafe_allow_html=True)
+                available_subjects = [row[0] for row in subjects_rows if row[0]]
+                
+                if available_subjects:
+                    selected_subject_filter = st.selectbox("اختر المادة الدراسية لعرض أساتذتها:", ["جميع المواد"] + available_subjects)
+                    st.write("---")
+                    
+                    with sqlite3.connect(DB_NAME) as conn:
+                        c = conn.cursor()
+                        if selected_subject_filter == "جميع المواد":
+                            c.execute("SELECT name, subject, price, room_id, phone FROM teachers WHERE is_blocked=0")
                         else:
-                            if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
-                                st.session_state.sub_target_teacher = {
-                                    "phone": t_ph,
-                                    "name": t_name,
-                                    "subject": t_sub,
-                                    "price": t_price,
-                                    "room_id": r_id
-                                }
-                                st.session_state.inside_teacher_room = False
-                                st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
+                            c.execute("SELECT name, subject, price, room_id, phone FROM teachers WHERE is_blocked=0 AND subject=?", (selected_subject_filter,))
+                        teachers = c.fetchall()
+                    
+                    if teachers:
+                        for t_name, t_sub, t_price, r_id, t_ph in teachers:
+                            st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                            col_info, col_btn = st.columns([3, 1])
+                            col_info.markdown(f"### 👨‍🏫 الأستاذ: {t_name}")
+                            col_info.markdown(f"📖 **المادة:** <span class='promo-badge'>{t_sub}</span>", unsafe_allow_html=True)
+                            
+                            sub_check_status = None
+                            try:
+                                with sqlite3.connect(DB_NAME) as conn_sub:
+                                    cs = conn_sub.cursor()
+                                    cs.execute("SELECT status FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                                              (st.session_state.user_phone, t_ph))
+                                    s_row = cs.fetchone()
+                                    if s_row:
+                                        sub_check_status = s_row[0]
+                            except:
+                                pass
+
+                            if sub_check_status == 'active':
+                                if col_btn.button("دخول الغرفة 🎬", key=f"btn_enter_room_{t_ph}"):
+                                    st.session_state.sub_target_teacher = {
+                                        "phone": t_ph,
+                                        "name": t_name,
+                                        "subject": t_sub,
+                                        "price": t_price,
+                                        "room_id": r_id
+                                    }
+                                    st.session_state.inside_teacher_room = True
+                                    st.rerun()
+                            elif sub_check_status == 'pending':
+                                col_btn.markdown("<span style='color:orange; font-weight:bold;'>قيد المراجعة ⏳</span>", unsafe_allow_html=True)
+                            else:
+                                if col_btn.button("اشتراك ⚡", key=f"btn_go_sub_{t_ph}"):
+                                    st.session_state.sub_target_teacher = {
+                                        "phone": t_ph,
+                                        "name": t_name,
+                                        "subject": t_sub,
+                                        "price": t_price,
+                                        "room_id": r_id
+                                    }
+                                    st.session_state.inside_teacher_room = False
+                                    st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("لا توجد أساتذة متاحين في هذه المادة حالياً.")
                 else:
-                    st.info("لا يوجد أساتذة متاحين حالياً.")
+                    st.info("لا توجد مواد أو أساتذة مسجلين في المنصة حالياً.")
             except:
                 pass
         else:
@@ -752,12 +775,12 @@ else:
             t_price_val = target_t["price"]
             r_id_val = target_t["room_id"]
             
-            if st.button("⬅️ العودة لقائمة الأساتذة"):
+            if st.button("⬅️ العودة لقائمة المواد والأساتذة"):
                 st.session_state.sub_target_teacher = None
                 st.session_state.inside_teacher_room = False
                 st.rerun()
                 
-            st.markdown(f"## 👨‍🏫 الأستاذ: {t_name_val} ({target_t['subject']})")
+            st.markdown(f"## 📖 مادة: {target_t['subject']} | الأستاذ: {t_name_val}")
             
             sub_info = None
             try:
@@ -821,20 +844,20 @@ else:
                 st.markdown(f"""
                 <div class="success-alert">
                     🎉 تم قبول اشتراكك بنجاح من الأستاذ!<br>
-                    ⏳ الموعد والوقت المتبقي لدخول القاعة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
+                    ⏳ الموعد والوقت المتبقي لدخول القاعة المستقلة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
                 </div>
                 """, unsafe_allow_html=True)
 
                 if not st.session_state.inside_teacher_room:
-                    if st.button("دخول لقاعة الأستاذ وعرض البث والفيديوهات 🎬"):
+                    if st.button("دخول الغرفة المستقلة وعرض البث والفيديوهات 🎬"):
                         st.session_state.inside_teacher_room = True
                         st.rerun()
                 else:
-                    if st.button("❌ الخروج من القاعة العودة للرئيسية"):
+                    if st.button("❌ الخروج من الغرفة والعودة للمواد"):
                         st.session_state.inside_teacher_room = False
                         st.rerun()
 
-                    tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
+                    tab_live, tab_media, tab_exams, tab_chat = st.tabs(["🔴 البث المباشر المستقل والشات", "🎬 الفيديوهات", "📝 الامتحانات", "💬 الشات الخاص"])
                     with tab_live:
                         stream_html = f"""
                         <iframe src="https://vdo.ninja/?view={r_id_val}&autostart=1" 
@@ -861,7 +884,7 @@ else:
                 """, unsafe_allow_html=True)
                 
                 st.write("---")
-                st.markdown("### 🌟 الفيديوهات الترويجية والعامة للأستاذ:")
+                st.markdown("### 🌟 الفيديوهات الترويجية والمعاينة للمادة:")
                 display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
                 
                 if st.button("إلغاء الطلب المعلق"):
@@ -871,7 +894,7 @@ else:
                         conn.commit()
                     st.rerun()
             else:
-                st.markdown("### 🌟 فيديوهات ومعاينة عامة مجانية:")
+                st.markdown("### 🌟 فيديوهات ومعاينة عامة مجانية للمادة:")
                 display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
                 st.write("---")
 
@@ -879,14 +902,14 @@ else:
                 
                 st.markdown(f"""
                 <div class="cash-box">
-                    أهلاً بك! قبل إرسال طلب الاشتراك، يرجى اختيار مرحلتك الدراسية وتحويل مبلغ ({t_price_val} جـ) على أورانج كاش الآتي: <br>
+                    أهلاً بك! قبل إرسال طلب الاشتراك، يرجى تحديد مرحلتك الدراسية وتحويل مبلغ ({t_price_val} جـ) على أورانج كاش الآتي: <br>
                     <span style="font-size: 20px; color: #4f46e5;">{fixed_orange_number}</span><br>
                     ثم اكتب رقم أورانج كاش الذي حوّلت منه في الخانة أدناه واضغط إرسال طلب الاشتراك للأستاذ:
                 </div>
                 """, unsafe_allow_html=True)
                 
                 with st.form(f"orange_pay_form_{t_phone_val}"):
-                    student_stage_input = st.selectbox("حدد مرحلتك الدراسية عند دخولك:", ["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"])
+                    student_stage_input = st.selectbox("حدد مرحلتك الدراسية:", ["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"])
                     orange_sender_input = st.text_input("اكتب رقم أورانج كاش الذي حوّلت منه:")
                     pay_btn = st.form_submit_button("إرسال طلب الاشتراك للأستاذ ⚡")
                     
@@ -914,22 +937,24 @@ else:
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 c = conn.cursor()
-                c.execute("SELECT name, room_id FROM teachers WHERE phone=?", (t_phone,))
+                c.execute("SELECT name, room_id, subject FROM teachers WHERE phone=?", (t_phone,))
                 t_row = c.fetchone()
                 t_name = t_row[0] if t_row else "أستاذ"
                 room_id = t_row[1] if t_row else f"room_{t_phone}"
+                t_subject_name = t_row[2] if t_row else "مادة عامة"
         except:
             t_name = "أستاذ"
             room_id = f"room_{t_phone}"
+            t_subject_name = "مادة عامة"
 
-        st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
+        st.subheader(f"لوحة تحكم الأستاذ: {t_name} | المادة: {t_subject_name}")
         
         tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
-            "🔴 البث", "👥 الطلبات والاشتراكات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
+            "🔴 البث الغرفة المستقلة", "👥 الطلبات والاشتراكات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
         ])
 
         with tab_broadcast:
-            st.markdown("### إدارة البث المباشر والشات العام")
+            st.markdown(f"### إدارة البث المباشر المستقل لمادة ({t_subject_name})")
             stream_html = f"""
             <iframe src="https://vdo.ninja/?push={room_id}&autostart=1" 
                     style="width: 100%; height: 320px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
@@ -939,7 +964,7 @@ else:
             components.html(stream_html, height=340)
             
             st_autorefresh(interval=2000, key=f"chat_refresh_{room_id}")
-            st.markdown("💬 **شات البث المباشر العام:**")
+            st.markdown("💬 **شات البث المباشر العام في الغرفة:**")
             with st.form(f"chat_form_{room_id}", clear_on_submit=True):
                 msg = st.text_input("اكتب رسالة في الشات العام...")
                 send_btn = st.form_submit_button("إرسال")
@@ -977,11 +1002,11 @@ else:
                 
                 p_vis_choice = st.selectbox(
                     "من يمكنه مشاهدة هذا الفيديو؟", 
-                    ["فيديو ترويجي عام (يظهر للجميع ولغير المشتركين 🌟)", "محتوى حصري (للمشتركين فقط 🔒)"]
+                    ["فيديو ترويجي عام للمادة (يظهر للجميع ولغير المشتركين 🌟)", "محتوى حصري (للمشتركين فقط في الغرفة 🔒)"]
                 )
                 
                 uploaded_file = st.file_uploader("اختر الملف:", type=["mp4", "mov", "avi", "mkv", "png", "jpg", "jpeg"])
-                up_btn = st.form_submit_button("رفع ونشر الفوري")
+                up_btn = st.form_submit_button("رفع ونشر فوري")
 
                 if up_btn:
                     if p_title and uploaded_file is not None:
@@ -1000,14 +1025,14 @@ else:
                                 c.execute("INSERT INTO posts (teacher_phone, title, media_type, file_path, status, visibility) VALUES (?, ?, ?, ?, 'approved', ?)",
                                           (t_phone, p_title, p_type, file_path, vis_db_val))
                                 conn.commit()
-                            st.success("✅ تم نشر الفيديو بنجاح بالشكل المخصص!")
+                            st.success("✅ تم نشر الفيديو بنجاح في مادتك وغرفتك المستقلة!")
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء حفظ الملف: {e}")
                     else:
                         st.error("الرجاء كتابة عنوان الفيديو وإرفاق الملف بشكل صحيح.")
 
         with tab_manage_posts:
-            st.subheader("🎬 قائمة فيديوهاتك المنشورة وإدارتها")
+            st.subheader("🎬 قائمة فيديوهاتك المنشورة في المادة")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -1017,7 +1042,7 @@ else:
                 if my_posts:
                     for mp_id, mp_title, mp_type, mp_path, mp_views, mp_vis in my_posts:
                         display_mp_views = max(25, mp_views + 25)
-                        vis_label = "🌟 عام للكل" if mp_vis == 'public' else "🔒 للمشتركين فقط"
+                        vis_label = "🌟 عام للمادة" if mp_vis == 'public' else "🔒 للمشتركين فقط"
                         st.markdown(f"📌 **{mp_title}** | النوع: `{vis_label}` | المشاهدات: {display_mp_views}")
                         
                         if mp_path and os.path.exists(mp_path):
@@ -1042,7 +1067,7 @@ else:
                 pass
 
         with tab_exams_manage:
-            st.subheader("📝 إنشاء وإضافة أسئلة الامتحان لطلابك")
+            st.subheader("📝 إنشاء وإضافة أسئلة الامتحان لطلاب المادة")
             with st.form("create_exam_form", clear_on_submit=True):
                 q_text = st.text_area("نص السؤال:")
                 o1 = st.text_input("الاختيار الأول:")
@@ -1050,7 +1075,7 @@ else:
                 o3 = st.text_input("الاختيار الثالث:")
                 o4 = st.text_input("الاختيار الرابع:")
                 correct_opt = st.text_input("الإجابة الصحيحة بالضبط (اكتبها كما كتبتها في الاختيارات أعلاه):")
-                add_exam_btn = st.form_submit_button("نشر السؤال لطلابك")
+                add_exam_btn = st.form_submit_button("نشر السؤال لطلاب المادة")
 
                 if add_exam_btn:
                     if q_text and o1 and o2 and correct_opt:
@@ -1061,7 +1086,7 @@ else:
                                 c.execute("INSERT INTO exams (teacher_phone, question, opt1, opt2, opt3, opt4, correct_answer, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                                           (t_phone, q_text, o1, o2, o3, o4, correct_opt, t_now_str))
                                 conn.commit()
-                            st.success("تم إضافة السؤال بنجاح وظهر لطلابك المشتركين!")
+                            st.success("تم إضافة السؤال بنجاح وظهر لطلابك المشتركين في الغرفة!")
                             st.rerun()
                         except:
                             pass
@@ -1069,7 +1094,7 @@ else:
                         st.error("الرجاء إدخال السؤال واختيارين على الأقل وتحديد الإجابة الصحيحة.")
 
             st.write("---")
-            st.subheader("📋 الأسئلة التي أنشأتها مسبقاً:")
+            st.subheader("📋 الأسئلة التي أنشأتها مسبقاً لمادتك:")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -1093,7 +1118,7 @@ else:
                 pass
 
         with tab_smart_chat:
-            st.subheader("💬 الشات الذكي الخاص مع الطلاب")
+            st.subheader("💬 الشات الذكي الخاص مع طلاب المادة")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -1119,7 +1144,7 @@ else:
         st.subheader("لوحة تحكم المطور الخارقة 👑")
         
         dev_section = st.selectbox("اختر قسم التحكم:", [
-            "👑 إدارة وتعديل الأساتذة بالكامل",
+            "👑 إدارة وتعديل الأساتذة وموادهم",
             "🎓 إدارة وتعديل الطلاب بالكامل",
             "🎬 إدارة المحتوى ومنشورات الأساتذة وحذفها",
             "🛡️ إدارة الحظر والفك", 
@@ -1130,8 +1155,8 @@ else:
         
         st.write("---")
 
-        if dev_section == "👑 إدارة وتعديل الأساتذة بالكامل":
-            st.subheader("👨‍🏫 قائمة الأساتذة (تعديل البيانات أو الحذف)")
+        if dev_section == "👑 إدارة وتعديل الأساتذة وموادهم":
+            st.subheader("👨‍🏫 قائمة الأساتذة وموادهم (تعديل أو حذف)")
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
@@ -1140,10 +1165,10 @@ else:
                 
                 if all_teachers:
                     for t_id, t_ph, t_n, t_s, t_p in all_teachers:
-                        with st.expander(f"👨‍🏫 {t_n} ({t_s}) - هاتف: {t_ph}"):
+                        with st.expander(f"👨‍🏫 {t_n} - مادة: ({t_s}) - هاتف: {t_ph}"):
                             with st.form(f"edit_teacher_{t_id}"):
                                 new_name = st.text_input("اسم الأستاذ:", value=t_n)
-                                new_sub = st.text_input("المادة:", value=t_s)
+                                new_sub = st.text_input("المادة الدراسية:", value=t_s)
                                 new_price = st.number_input("سعر الاشتراك (جـ):", value=float(t_p))
                                 update_t_btn = st.form_submit_button("حفظ التعديلات")
                                 
@@ -1153,7 +1178,7 @@ else:
                                         c.execute("UPDATE teachers SET name=?, subject=?, price=? WHERE id=?", (new_name, new_sub, new_price, t_id))
                                         c.execute("UPDATE users SET name=? WHERE phone=?", (new_name, t_ph))
                                         conn.commit()
-                                    st.success("تم تحديث بيانات الأستاذ بنجاح!")
+                                    st.success("تم تحديث بيانات الأستاذ والمادة بنجاح!")
                                     st.rerun()
                             
                             if st.button(f"🗑️ حذف الأستاذ نهائياً", key=f"del_teacher_{t_id}"):
