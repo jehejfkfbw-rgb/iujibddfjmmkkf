@@ -126,10 +126,15 @@ def init_db():
             
         c.execute('''CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, student_phone TEXT, teacher_phone TEXT,
-            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
+            status TEXT DEFAULT 'pending', orange_cash_sender TEXT, requested_at TEXT, expires_at TEXT, entry_expires_at TEXT, UNIQUE(student_phone, teacher_phone))''')
             
         try:
             c.execute("ALTER TABLE subscriptions ADD COLUMN orange_cash_sender TEXT")
+        except:
+            pass
+
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN entry_expires_at TEXT")
         except:
             pass
 
@@ -363,12 +368,12 @@ def display_teacher_requests(teacher_phone):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at, entry_expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
                 now = datetime.datetime.now()
-                for s_ph, status, orange_sender, req_at, expires_at in subs:
+                for s_ph, status, orange_sender, req_at, expires_at, entry_exp in subs:
                     if status == 'active' and expires_at:
                         try:
                             exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
@@ -387,27 +392,22 @@ def display_teacher_requests(teacher_phone):
                     st.markdown(f"💳 **رقم أورانج كاش المحول منه:** `{orange_sender or 'غير متوفر'}` | وقت الطلب: `{req_at}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
-                        # اختيار مدة الصلاحية بالدقائق أو الساعات
-                        duration_unit = st.selectbox("وحدة المدة:", ["دقائق", "ساعات", "أيام"], key=f"unit_{s_ph}")
-                        duration_val = st.number_input("حدد مدة الاشتراك للطالب:", min_value=1, value=10, key=f"val_{s_ph}")
+                        st.markdown("<b>إعدادات الموافقة والوقت:</b>", unsafe_allow_html=True)
+                        sub_days = st.number_input("مدة صلوحية الاشتراك (بالأيام):", min_value=1, value=30, key=f"days_{s_ph}")
+                        entry_minutes = st.number_input("عداد تنازلي لدخول القاعة (بالدقائق):", min_value=1, value=10, key=f"mins_{s_ph}")
                         
                         col_act1, col_act2 = st.columns(2)
-                        acc_btn = col_act1.form_submit_button("✅ قبول وتفعيل بالوقت المحدد")
+                        acc_btn = col_act1.form_submit_button("✅ قبول وتحديد الوقت")
                         ref_btn = col_act2.form_submit_button("❌ حذف / رفض")
                         
                         if acc_btn:
-                            if duration_unit == "دقائق":
-                                delta = datetime.timedelta(minutes=duration_val)
-                            elif duration_unit == "ساعات":
-                                delta = datetime.timedelta(hours=duration_val)
-                            else:
-                                delta = datetime.timedelta(days=duration_val)
-                                
-                            exp_time = (now + delta).strftime("%Y-%m-%d %H:%M:%S")
-                            c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", 
-                                      (exp_time, s_ph, teacher_phone))
+                            exp_sub_time = (now + datetime.timedelta(days=sub_days)).strftime("%Y-%m-%d %H:%M:%S")
+                            entry_exp_time = (now + datetime.timedelta(minutes=entry_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            c.execute("UPDATE subscriptions SET status='active', expires_at=?, entry_expires_at=? WHERE student_phone=? AND teacher_phone=?", 
+                                      (exp_sub_time, entry_exp_time, s_ph, teacher_phone))
                             conn.commit()
-                            st.success("تم تفعيل اشتراك الطالب بالوقت المحدد بنجاح!")
+                            st.success("تم قبول الطالب وتحديد مهلة الدخول ومدة الاشتراك بنجاح!")
                             st.rerun()
                             
                         if ref_btn:
@@ -418,7 +418,7 @@ def display_teacher_requests(teacher_phone):
                             
                     st.write("---")
             else:
-                st.info("لا توجد طلبات اشتراك معلقة حالياً.")
+                st.info("لا توجد طلبات اشتراك حالياً.")
     except:
         pass
 
@@ -748,7 +748,7 @@ else:
             try:
                 with sqlite3.connect(DB_NAME) as conn:
                     c = conn.cursor()
-                    c.execute("SELECT status, expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
+                    c.execute("SELECT status, expires_at, entry_expires_at FROM subscriptions WHERE student_phone=? AND teacher_phone=?", 
                               (st.session_state.user_phone, t_phone_val))
                     sub_info = c.fetchone()
             except:
@@ -756,6 +756,7 @@ else:
 
             sub_status = sub_info[0] if sub_info else None
             expires_at = sub_info[1] if sub_info and len(sub_info) > 1 else None
+            entry_expires_at = sub_info[2] if sub_info and len(sub_info) > 2 else None
 
             is_expired = False
             if expires_at and sub_status == 'active':
@@ -772,43 +773,51 @@ else:
                     pass
 
             if sub_status == 'active' and not is_expired:
-                # حساب العداد التنازلي المتبقي بدقة وعرضه للطالب
-                try:
-                    exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
-                    remaining_seconds = int((exp_dt - datetime.datetime.now()).total_seconds())
-                    if remaining_seconds < 0:
-                        remaining_seconds = 0
-                except:
-                    remaining_seconds = 0
+                # التحقق من عداد الدخول للقاعة (المهلة المحددة)
+                entry_expired = False
+                remaining_entry_seconds = 0
+                if entry_expires_at:
+                    try:
+                        entry_dt = datetime.datetime.strptime(entry_expires_at, "%Y-%m-%d %H:%M:%S")
+                        remaining_entry_seconds = int((entry_dt - datetime.datetime.now()).total_seconds())
+                        if remaining_entry_seconds <= 0:
+                            entry_expired = True
+                    except:
+                        pass
 
-                st_autorefresh(interval=1000, key=f"countdown_timer_{t_phone_val}")
-
-                hours = remaining_seconds // 3600
-                minutes = (remaining_seconds % 3600) // 60
-                seconds = remaining_seconds % 60
-                timer_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-                st.markdown(f"""
-                <div class="success-alert">
-                    🎉 اشتراكك فعال الآن!<br>
-                    ⏳ الوقت المتبقي لانتهاء صلاحية الاشتراك ودخول القاعة: <b style="font-size: 20px; color: #b91c1c;">{timer_str}</b>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if remaining_seconds <= 0:
-                    st.warning("انتهى وقت اشتراكك المخصص! يتم تحديث الصفحة...")
-                    st.rerun()
-
-                if not st.session_state.inside_teacher_room:
-                    if st.button("دخول لقاعة الأستاذ وعرض الفيديوهات والبث 🎬"):
-                        st.session_state.inside_teacher_room = True
-                        st.rerun()
-                else:
-                    if st.button("❌ إلغاء الاشتراك والخروج من القاعة"):
+                if entry_expired:
+                    st.warning("❌ انتهى وقت مهلة الدخول المحددة من الأستاذ! تم إنهاء الاشتراك تلقائياً.")
+                    try:
                         with sqlite3.connect(DB_NAME) as conn:
                             c = conn.cursor()
                             c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (st.session_state.user_phone, t_phone_val))
                             conn.commit()
+                    except:
+                        pass
+                    st.session_state.inside_teacher_room = False
+                    st.rerun()
+
+                st_autorefresh(interval=1000, key=f"countdown_timer_{t_phone_val}")
+
+                e_hours = remaining_entry_seconds // 3600
+                e_minutes = (remaining_entry_seconds % 3600) // 60
+                e_seconds = remaining_entry_seconds % 60
+                entry_timer_str = f"{e_hours:02d}:{e_minutes:02d}:{e_seconds:02d}"
+
+                st.markdown(f"""
+                <div class="success-alert">
+                    🎉 تم قبول اشتراكك بنجاح!<br>
+                    ⏳ الوقت المتبقي للدخول لقاعة الأستاذ قبل انتهاء المهلة: <b style="font-size: 20px; color: #b91c1c;">{entry_timer_str}</b>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # الشرط الصارم: لا يظهر البث أو القاعة تماماً إلا إذا ضغط الطالب زر الدخول وكان الاشتراك ساري والمهلة لم تنتهِ
+                if not st.session_state.inside_teacher_room:
+                    if st.button("دخول لقاعة الأستاذ وعرض البث والفيديوهات 🎬"):
+                        st.session_state.inside_teacher_room = True
+                        st.rerun()
+                else:
+                    if st.button("❌ الخروج من القاعة العودة للرئيسية"):
                         st.session_state.inside_teacher_room = False
                         st.rerun()
 
@@ -834,7 +843,7 @@ else:
             elif sub_status == 'pending':
                 st.markdown("""
                 <div class="success-alert">
-                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار تحديد مدة القبول وتفعيل الاشتراك.
+                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار قبول الطلب وتحديد مدة الاشتراك ووقت الدخول.
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -944,7 +953,7 @@ else:
                 pass
 
         with tab_subs:
-            st.markdown("### 📥 طلبات الاشتراك الواردة من الطلاب وتحديد وقت الصلاحية")
+            st.markdown("### 📥 طلبات الاشتراك الواردة وتحديد أيام الصلاحية ووقت الدخول")
             display_teacher_requests(t_phone)
 
         with tab_upload:
@@ -1271,7 +1280,7 @@ else:
                     except:
                         pass
 
-        elif dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
+        elif dev_section == "👨‍نف أرقام الأساتذة المسموح لهم بالتسجيل" or dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
             st.subheader("➕ إضافة رقم أستاذ مصرح له")
             with st.form("add_allowed_teacher_form"):
                 new_t_phone = st.text_input("أدخل رقم محمول الأستاذ:")
@@ -1304,7 +1313,7 @@ else:
                                     c = conn.cursor()
                                     c.execute("DELETE FROM allowed_teachers WHERE id=?", (a_id,))
                                     conn.commit()
-                                st.rerun()
+                                st.rerurn()
             except:
                 pass
 
