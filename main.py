@@ -296,7 +296,6 @@ def display_student_media(teacher_phone, student_phone, is_subscriber=True):
             if is_subscriber:
                 c.execute("SELECT id, title, media_type, file_path, views_count, visibility FROM posts WHERE teacher_phone=? AND status='approved' ORDER BY id DESC", (teacher_phone,))
             else:
-                # غير المشتركين يظهر لهم الفيديوهات الترويجية والعامة فقط
                 c.execute("SELECT id, title, media_type, file_path, views_count, visibility FROM posts WHERE teacher_phone=? AND status='approved' AND visibility='public' ORDER BY id DESC", (teacher_phone,))
             
             posts = c.fetchall()
@@ -388,16 +387,27 @@ def display_teacher_requests(teacher_phone):
                     st.markdown(f"💳 **رقم أورانج كاش المحول منه:** `{orange_sender or 'غير متوفر'}` | وقت الطلب: `{req_at}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
+                        # اختيار مدة الصلاحية بالدقائق أو الساعات
+                        duration_unit = st.selectbox("وحدة المدة:", ["دقائق", "ساعات", "أيام"], key=f"unit_{s_ph}")
+                        duration_val = st.number_input("حدد مدة الاشتراك للطالب:", min_value=1, value=10, key=f"val_{s_ph}")
+                        
                         col_act1, col_act2 = st.columns(2)
-                        acc_btn = col_act1.form_submit_button("✅ قبول وتفعيل الاشتراك")
+                        acc_btn = col_act1.form_submit_button("✅ قبول وتفعيل بالوقت المحدد")
                         ref_btn = col_act2.form_submit_button("❌ حذف / رفض")
                         
                         if acc_btn:
-                            exp_time = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+                            if duration_unit == "دقائق":
+                                delta = datetime.timedelta(minutes=duration_val)
+                            elif duration_unit == "ساعات":
+                                delta = datetime.timedelta(hours=duration_val)
+                            else:
+                                delta = datetime.timedelta(days=duration_val)
+                                
+                            exp_time = (now + delta).strftime("%Y-%m-%d %H:%M:%S")
                             c.execute("UPDATE subscriptions SET status='active', expires_at=? WHERE student_phone=? AND teacher_phone=?", 
                                       (exp_time, s_ph, teacher_phone))
                             conn.commit()
-                            st.success("تم تفعيل اشتراك الطالب بنجاح!")
+                            st.success("تم تفعيل اشتراك الطالب بالوقت المحدد بنجاح!")
                             st.rerun()
                             
                         if ref_btn:
@@ -762,13 +772,34 @@ else:
                     pass
 
             if sub_status == 'active' and not is_expired:
+                # حساب العداد التنازلي المتبقي بدقة وعرضه للطالب
+                try:
+                    exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+                    remaining_seconds = int((exp_dt - datetime.datetime.now()).total_seconds())
+                    if remaining_seconds < 0:
+                        remaining_seconds = 0
+                except:
+                    remaining_seconds = 0
+
+                st_autorefresh(interval=1000, key=f"countdown_timer_{t_phone_val}")
+
+                hours = remaining_seconds // 3600
+                minutes = (remaining_seconds % 3600) // 60
+                seconds = remaining_seconds % 60
+                timer_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                st.markdown(f"""
+                <div class="success-alert">
+                    🎉 اشتراكك فعال الآن!<br>
+                    ⏳ الوقت المتبقي لانتهاء صلاحية الاشتراك ودخول القاعة: <b style="font-size: 20px; color: #b91c1c;">{timer_str}</b>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if remaining_seconds <= 0:
+                    st.warning("انتهى وقت اشتراكك المخصص! يتم تحديث الصفحة...")
+                    st.rerun()
+
                 if not st.session_state.inside_teacher_room:
-                    st.markdown("""
-                    <div class="success-alert">
-                        🎉 مبروك! تم قبول اشتراكك بنجاح من الأستاذ.
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
                     if st.button("دخول لقاعة الأستاذ وعرض الفيديوهات والبث 🎬"):
                         st.session_state.inside_teacher_room = True
                         st.rerun()
@@ -803,11 +834,10 @@ else:
             elif sub_status == 'pending':
                 st.markdown("""
                 <div class="success-alert">
-                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار المراجعة والتفعيل.
+                    🎉 ✅ تم إرسال طلب الاشتراك بنجاح ووصل للأستاذ! في انتظار تحديد مدة القبول وتفعيل الاشتراك.
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # عرض الفيديوهات الترويجية العامة حتى أثناء الانتظار
                 st.write("---")
                 st.markdown("### 🌟 الفيديوهات الترويجية والعامة للأستاذ:")
                 display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
@@ -819,7 +849,6 @@ else:
                         conn.commit()
                     st.rerun()
             else:
-                # إذا لم يكن مشتركاً، اعرض له الفيديوهات الترويجية العامة أولاً كمعاينة لجذب انتباهه
                 st.markdown("### 🌟 فيديوهات ومعاينة عامة مجانية:")
                 display_student_media(t_phone_val, st.session_state.user_phone, is_subscriber=False)
                 st.write("---")
@@ -915,7 +944,7 @@ else:
                 pass
 
         with tab_subs:
-            st.markdown("### 📥 طلبات الاشتراك الواردة من الطلاب")
+            st.markdown("### 📥 طلبات الاشتراك الواردة من الطلاب وتحديد وقت الصلاحية")
             display_teacher_requests(t_phone)
 
         with tab_upload:
@@ -923,7 +952,6 @@ else:
                 p_title = st.text_input("عنوان الفيديو أو المحتوى:")
                 p_type = st.selectbox("نوع الملف:", ["video", "image"])
                 
-                # الخيار المطلوب: هل الفيديو يظهر للكل (ترويجي) أم للمشتركين فقط؟
                 p_vis_choice = st.selectbox(
                     "من يمكنه مشاهدة هذا الفيديو؟", 
                     ["فيديو ترويجي عام (يظهر للجميع ولغير المشتركين 🌟)", "محتوى حصري (للمشتركين فقط 🔒)"]
