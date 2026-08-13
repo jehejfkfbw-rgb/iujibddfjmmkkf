@@ -368,27 +368,18 @@ def display_teacher_requests(teacher_phone):
     try:
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
-            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at, entry_expires_at FROM subscriptions WHERE teacher_phone=?", (teacher_phone,))
+            # جلب الطلبات التي ما زالت في حالة pending فقط، أو المشتركة المعلقة
+            c.execute("SELECT student_phone, status, orange_cash_sender, requested_at, expires_at, entry_expires_at FROM subscriptions WHERE teacher_phone=? AND status='pending'", (teacher_phone,))
             subs = c.fetchall()
             
             if subs:
                 now = datetime.datetime.now()
                 for s_ph, status, orange_sender, req_at, expires_at, entry_exp in subs:
-                    if status == 'active' and expires_at:
-                        try:
-                            exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
-                            if now > exp_dt:
-                                c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (s_ph, teacher_phone))
-                                conn.commit()
-                                continue
-                        except:
-                            pass
-
                     c.execute("SELECT name FROM users WHERE phone=?", (s_ph,))
                     st_data = c.fetchone()
                     st_display_name = st_data[0] if st_data else s_ph
 
-                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | الحالة: **{status}**")
+                    st.markdown(f"🎓 **{st_display_name}** | هاتف الطالب: `{s_ph}` | الحالة: **قيد المراجعة ⏳**")
                     st.markdown(f"💳 **رقم أورانج كاش المحول منه:** `{orange_sender or 'غير متوفر'}` | وقت الطلب: `{req_at}`")
                     
                     with st.form(f"sub_manage_form_{s_ph}"):
@@ -398,12 +389,13 @@ def display_teacher_requests(teacher_phone):
                         
                         col_act1, col_act2 = st.columns(2)
                         acc_btn = col_act1.form_submit_button("✅ قبول وتحديد الوقت")
-                        ref_btn = col_act2.form_submit_button("❌ حذف / رفض")
+                        ref_btn = col_act2.form_submit_button("❌ إلغاء / رفض الطلب")
                         
                         if acc_btn:
                             exp_sub_time = (now + datetime.timedelta(days=sub_days)).strftime("%Y-%m-%d %H:%M:%S")
                             entry_exp_time = (now + datetime.timedelta(minutes=entry_minutes)).strftime("%Y-%m-%d %H:%M:%S")
                             
+                            # تحويل الحالة إلى active وتحديث التواريخ (تختفي فوراً من الطلبات المعلقة وتتحول لاشتراك نشط)
                             c.execute("UPDATE subscriptions SET status='active', expires_at=?, entry_expires_at=? WHERE student_phone=? AND teacher_phone=?", 
                                       (exp_sub_time, entry_exp_time, s_ph, teacher_phone))
                             conn.commit()
@@ -418,7 +410,28 @@ def display_teacher_requests(teacher_phone):
                             
                     st.write("---")
             else:
-                st.info("لا توجد طلبات اشتراك حالياً.")
+                st.info("لا توجد طلبات اشتراك معلقة جديدة حالياً.")
+                
+            # عرض الطلاب المشتركين الفعليين حالياً مع زر لإلغاء الاشتراك إذا أراد الأستاذ
+            st.markdown("### 👥 الطلاب المشتركين الفعّالين لديك:")
+            c.execute("SELECT student_phone, expires_at FROM subscriptions WHERE teacher_phone=? AND status='active'", (teacher_phone,))
+            active_subs = c.fetchall()
+            
+            if active_subs:
+                for a_ph, a_exp in active_subs:
+                    c.execute("SELECT name FROM users WHERE phone=?", (a_ph,))
+                    st_data = c.fetchone()
+                    st_display_name = st_data[0] if st_data else a_ph
+                    
+                    st.markdown(f"✅ **{st_display_name}** (`{a_ph}`) | ينتهي في: `{a_exp}`")
+                    if st.button("🗑️ إلغاء اشتراك هذا الطالب", key=f"cancel_active_sub_{a_ph}"):
+                        c.execute("DELETE FROM subscriptions WHERE student_phone=? AND teacher_phone=?", (a_ph, teacher_phone))
+                        conn.commit()
+                        st.success("تم إلغاء اشتراك الطالب بنجاح!")
+                        st.rerun()
+                    st.write("---")
+            else:
+                st.info("لا يوجد طلاب مشتركين حالياً.")
     except:
         pass
 
@@ -773,7 +786,6 @@ else:
                     pass
 
             if sub_status == 'active' and not is_expired:
-                # التحقق من عداد الدخول للقاعة (المهلة المحددة)
                 entry_expired = False
                 remaining_entry_seconds = 0
                 if entry_expires_at:
@@ -811,7 +823,6 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
 
-                # الشرط الصارم: لا يظهر البث أو القاعة تماماً إلا إذا ضغط الطالب زر الدخول وكان الاشتراك ساري والمهلة لم تنتهِ
                 if not st.session_state.inside_teacher_room:
                     if st.button("دخول لقاعة الأستاذ وعرض البث والفيديوهات 🎬"):
                         st.session_state.inside_teacher_room = True
@@ -911,7 +922,7 @@ else:
         st.subheader(f"لوحة تحكم الأستاذ: {t_name}")
         
         tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
-            "🔴 البث", "👥 الطلبات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
+            "🔴 البث", "👥 الطلبات والاشتراكات", "📤 رفع فيديو", "🎬 الفيديوهات", "📝 إنشاء الامتحانات", "💬 الشات"
         ])
 
         with tab_broadcast:
@@ -953,7 +964,7 @@ else:
                 pass
 
         with tab_subs:
-            st.markdown("### 📥 طلبات الاشتراك الواردة وتحديد أيام الصلاحية ووقت الدخول")
+            st.markdown("### 📥 الطلبات الواردة وإدارة الطلاب المشتركين")
             display_teacher_requests(t_phone)
 
         with tab_upload:
@@ -1280,7 +1291,7 @@ else:
                     except:
                         pass
 
-        elif dev_section == "👨‍نف أرقام الأساتذة المسموح لهم بالتسجيل" or dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
+        elif dev_section == "👨‍🏫 أرقام الأساتذة المسموح لهم بالتسجيل":
             st.subheader("➕ إضافة رقم أستاذ مصرح له")
             with st.form("add_allowed_teacher_form"):
                 new_t_phone = st.text_input("أدخل رقم محمول الأستاذ:")
@@ -1309,11 +1320,11 @@ else:
                             st.markdown(f"📞 `{a_ph}`")
                         with col_a2:
                             if st.button("حذف", key=f"del_allowed_{a_id}"):
-                                with sqlite3.connect(DB_NAME) as conn:
+                                with sqlite3.connect(DB_NAME) `as conn`:
                                     c = conn.cursor()
                                     c.execute("DELETE FROM allowed_teachers WHERE id=?", (a_id,))
                                     conn.commit()
-                                st.rerurn()
+                                st.rerun()
             except:
                 pass
 
