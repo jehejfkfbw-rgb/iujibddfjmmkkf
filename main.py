@@ -606,7 +606,7 @@ def display_teacher_requests(teacher_phone):
               f" في: `{a_exp}`"
           )
           if st.button(
-              "🗑️ إلغاء اشتراك الطالب", key=f"cancel_active_sub_{a_ph}_{a_subj}"
+              "🗑️ إلغاء الاشتراك", key=f"cancel_active_sub_{a_ph}_{a_subj}"
           ):
             c.execute(
                 "DELETE FROM subscriptions WHERE student_phone=? AND"
