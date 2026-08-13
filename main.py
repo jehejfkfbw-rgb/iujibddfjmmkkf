@@ -491,6 +491,9 @@ def display_teacher_requests(teacher_phone):
   try:
     with sqlite3.connect(DB_NAME) as conn:
       c = conn.cursor()
+
+      # 1. الطلبات المعلقة
+      st.markdown("### ⏳ طلبات الاشتراك المعلقة:")
       c.execute(
           "SELECT student_phone, subject_name, status, orange_cash_sender,"
           " student_educational_stage, requested_at, expires_at,"
@@ -587,7 +590,8 @@ def display_teacher_requests(teacher_phone):
       else:
         st.info("لا توجد طلبات اشتراك معلقة جديدة حالياً.")
 
-      st.markdown("### 👥 الطلاب المشتركين الفعّالين في موادك:")
+      # 2. الطلاب المقبولون والنشطون (مع زر إلغاء الاشتراك الدائم)
+      st.markdown("### 👥 الطلاب المقبولون والنشطون (مع زر إلغاء الاشتراك):")
       c.execute(
           "SELECT student_phone, subject_name, expires_at FROM subscriptions"
           " WHERE teacher_phone=? AND status='active'",
@@ -602,11 +606,14 @@ def display_teacher_requests(teacher_phone):
           st_display_name = st_data[0] if st_data else a_ph
 
           st.markdown(
-              f"✅ **{a_display_name}** | المادة: `{a_subj}` (`{a_ph}`) | ينتهي"
-              f" في: `{a_exp}`"
+              f"✅ **{a_display_name}** | المادة: <span"
+              f" class='promo-badge'>{a_subj}</span> | هاتف: `{a_ph}` | ينتهي"
+              f" في: `{a_exp}`",
+              unsafe_allow_html=True,
           )
           if st.button(
-              "🗑️ إلغاء الاشتراك", key=f"cancel_active_sub_{a_ph}_{a_subj}"
+              f"🗑️ إلغاء الاشتراك للطالب ({a_display_name} - {a_subj})",
+              key=f"cancel_active_sub_{a_ph}_{a_subj}",
           ):
             c.execute(
                 "DELETE FROM subscriptions WHERE student_phone=? AND"
@@ -618,7 +625,7 @@ def display_teacher_requests(teacher_phone):
             st.rerun()
           st.write("---")
       else:
-        st.info("لا يوجد طلاب مشتركين حالياً.")
+        st.info("لا يوجد طلاب مشتركين ومقبولين حالياً.")
   except:
     pass
 
@@ -1482,7 +1489,9 @@ else:
         )
 
     with tab_subs:
-      st.markdown("### 📥 الطلبات الواردة وقبول الطلاب للمواد")
+      st.markdown(
+          "### 📥 الطلبات الواردة والطلاب المقبولين وإلغاء الاشتراك"
+      )
       display_teacher_requests(t_phone)
 
     with tab_upload:
