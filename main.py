@@ -485,7 +485,6 @@ def display_teacher_requests(teacher_phone):
     with sqlite3.connect(DB_NAME) as conn:
       c = conn.cursor()
 
-      # 1. الطلبات المعلقة (قيد الانتظار)
       st.markdown("### ⏳ طلبات الاشتراك المعلقة:")
       c.execute(
           "SELECT student_phone, subject_name, status, orange_cash_sender,"
@@ -541,8 +540,6 @@ def display_teacher_requests(teacher_phone):
               exp_sub_time = (
                   now + datetime.timedelta(days=sub_days)
               ).strftime("%Y-%m-%d %H:%M:%S")
-
-              # تحديث حالة الطلب إلى active مع حفظ تاريخ الانتهاء (بالأيام)
               c.execute(
                   "UPDATE subscriptions SET status='active', expires_at=? WHERE"
                   " student_phone=? AND teacher_phone=? AND subject_name=?",
@@ -566,7 +563,6 @@ def display_teacher_requests(teacher_phone):
       else:
         st.info("لا توجد طلبات اشتراك معلقة جديدة حالياً.")
 
-      # 2. الطلاب المقبولون والنشطون (مع عرض العداد بالأيام وزر إلغاء الاشتراك الدائم)
       st.markdown("### 👥 الطلاب المقبولون والنشطون (مع العداد بالأيام وإلغاء الاشتراك):")
       c.execute(
           "SELECT student_phone, subject_name, expires_at FROM subscriptions"
@@ -581,7 +577,6 @@ def display_teacher_requests(teacher_phone):
           st_data = c.fetchone()
           st_display_name = st_data[0] if st_data else a_ph
 
-          # حساب الأيام المتبقية
           remaining_days_str = "منتهي"
           if a_exp:
             try:
@@ -1084,7 +1079,6 @@ else:
           pass
 
       if sub_status == "active" and not is_expired:
-        # حساب الأيام المتبقية لعرضها للطالب
         days_remaining_str = "جاري الحساب..."
         try:
           exp_dt = datetime.datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
@@ -1122,7 +1116,7 @@ else:
             st.rerun()
 
           tab_live, tab_media, tab_exams, tab_chat = st.tabs([
-              "🔴 البث المباشر المستقل والشات",
+              "🔴 البث المباشر (كاميرا + شاشة) والشات",
               "🎬 الفيديوهات",
               "📝 الامتحانات",
               "💬 الشات الخاص",
@@ -1130,11 +1124,11 @@ else:
           with tab_live:
             stream_html = f"""
                         <iframe src="https://vdo.ninja/?view={r_id_val}&autostart=1" 
-                                style="width: 100%; height: 300px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
-                                allow="camera; microphone; autoplay" allowfullscreen>
+                                style="width: 100%; height: 380px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
+                                allow="camera; microphone; autoplay; display-capture" allowfullscreen>
                         </iframe>
                         """
-            components.html(stream_html, height=320)
+            components.html(stream_html, height=400)
 
           with tab_media:
             display_student_media(
@@ -1266,7 +1260,7 @@ else:
 
     tab_subjects_manage, tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
         "📚 إدارة موادي (حد أقصى مادتين)",
-        "🔴 البث والغرف",
+        "🔴 البث (كاميرا + شاشة)",
         "👥 الطلبات والاشتراكات",
         "📤 رفع فيديو",
         "🎬 الفيديوهات",
@@ -1371,7 +1365,12 @@ else:
         st.info("لم تقم بإضافة أي مواد حتى الآن. أضف مادتك الأولى بالأعلى.")
 
     with tab_broadcast:
-      st.markdown("### 🔴 إدارة البث المباشر المستقل لغرف موادك")
+      st.markdown("### 🔴 بث مباشر احترافي (الكاميرا + مشاركة الشاشة)")
+      st.info(
+          "💡 **تعليمات البث للأستاذ:** عند فتح نافذة البث أدناه، يمكنك الضغط"
+          " على زر **مشاركة الشاشة (Screen Share)** لعرض الشاشة أو الأسئلة،"
+          " وستبقى كاميرا الويب الخاصة بك تعمل لكي يراك الطلاب بوضوح تام!"
+      )
       try:
         with sqlite3.connect(DB_NAME) as conn:
           c = conn.cursor()
@@ -1397,14 +1396,14 @@ else:
             f"room_{t_phone}",
         )
 
-        st.markdown(f"**البث المباشر الخاص بمادة: {selected_live_subj}**")
+        st.markdown(f"**البث المباشر المدمج (كاميرا وشاشة) لمادة: {selected_live_subj}**")
         stream_html = f"""
-                <iframe src="https://vdo.ninja/?push={active_room_id}&autostart=1" 
-                        style="width: 100%; height: 320px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
-                        allow="camera; microphone; autoplay" allowfullscreen>
+                <iframe src="https://vdo.ninja/?push={active_room_id}&autostart=1&quality=0" 
+                        style="width: 100%; height: 420px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
+                        allow="camera; microphone; autoplay; display-capture" allowfullscreen>
                 </iframe>
                 """
-        components.html(stream_html, height=340)
+        components.html(stream_html, height=440)
 
         st_autorefresh(interval=2000, key=f"chat_refresh_{active_room_id}")
         st.markdown("💬 **شات البث المباشر العام للمادة:**")
