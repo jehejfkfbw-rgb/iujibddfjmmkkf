@@ -653,7 +653,7 @@ st.write("---")
 if not st.session_state.is_logged_in:
   st.markdown("<div class='app-card'>", unsafe_allow_html=True)
   role_choice = st.radio(
-      "نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مطور 👑"], horizontal=True
+      "نوع الحساب:", ["طالب 👨‍🎓", "أستاذ 👨‍🏫", "مشرف 🛡️", "مطور 👑"], horizontal=True
   )
   st.markdown("</div>", unsafe_allow_html=True)
 
@@ -890,6 +890,21 @@ if not st.session_state.is_logged_in:
               st.error("بيانات غير صحيحة!")
           except:
             pass
+    st.markdown("</div>", unsafe_allow_html=True)
+
+  elif role_choice == "مشرف 🛡️":
+    st.markdown("<div class='app-card'>", unsafe_allow_html=True)
+    with st.form("supervisor_reg"):
+      st.subheader("دخول المشرف (معاذ السيد)")
+      sup_code = st.text_input("كود المشرف (100900):", type="password")
+      sup_btn = st.form_submit_button("دخول المشرف")
+
+      if sup_btn:
+        if sup_code.strip() == "100900":
+          login_user("supervisor_moaz", "مشرف")
+          st.rerun()
+        else:
+          st.error("كود المشرف خطأ!")
     st.markdown("</div>", unsafe_allow_html=True)
 
   elif role_choice == "مطور 👑":
@@ -1260,7 +1275,7 @@ else:
 
     tab_subjects_manage, tab_broadcast, tab_subs, tab_upload, tab_manage_posts, tab_exams_manage, tab_smart_chat = st.tabs([
         "📚 إدارة موادي (حد أقصى مادتين)",
-        "🔴 البث (كاميرا + شاشة)",
+        "🔴 البث (كاميرا + شاشة كاملة والمجلات)",
         "👥 الطلبات والاشتراكات",
         "📤 رفع فيديو",
         "🎬 الفيديوهات",
@@ -1365,12 +1380,28 @@ else:
         st.info("لم تقم بإضافة أي مواد حتى الآن. أضف مادتك الأولى بالأعلى.")
 
     with tab_broadcast:
-      st.markdown("### 🔴 بث مباشر احترافي (الكاميرا + مشاركة الشاشة)")
+      st.markdown("### 🔴 بث مباشر احترافي (التقاط الشاشة الكاملة والمجلات)")
       st.info(
-          "💡 **تعليمات البث للأستاذ:** عند فتح نافذة البث أدناه، يمكنك الضغط"
-          " على زر **مشاركة الشاشة (Screen Share)** لعرض الشاشة أو الأسئلة،"
-          " وستبقى كاميرا الويب الخاصة بك تعمل لكي يراك الطلاب بوضوح تام!"
+          "💡 **تعليمات البث للأستاذ:** عند بدء البث، سيتم تصغير منصة نوفا وإخفائها مؤقتاً (بدون إغلاقها) لتبدأ شاشة اللابتوب الكاملة والمجلات والنوافذ المحددة بالظهور تماماً على هواتف الطلاب!"
       )
+      
+      # زر تصغير / إخفاء المنصة تلقائياً للبدء
+      minimize_script = """
+      <script>
+         function minimizeWindow() {
+             // محاولة تصغير نافذة المتصفح تلقائياً عند بدء البث
+             window.blur();
+             if (window.parent) {
+                 window.parent.blur();
+             }
+         }
+      </script>
+      <button onclick="minimizeWindow()" style="background:#059669; color:#fff; border:none; padding:10px 18px; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; margin-bottom:12px;">
+          🖥️ بدء البث الشامل وتصغير المنصة للخلفية
+      </button>
+      """
+      components.html(minimize_script, height=60)
+
       try:
         with sqlite3.connect(DB_NAME) as conn:
           c = conn.cursor()
@@ -1396,9 +1427,9 @@ else:
             f"room_{t_phone}",
         )
 
-        st.markdown(f"**البث المباشر المدمج (كاميرا وشاشة) لمادة: {selected_live_subj}**")
+        st.markdown(f"**البث المباشر (شاشة اللابتوب بالكامل + المجلات والمحتوى) لمادة: {selected_live_subj}**")
         stream_html = f"""
-                <iframe src="https://vdo.ninja/?push={active_room_id}&autostart=1&quality=0" 
+                <iframe src="https://vdo.ninja/?push={active_room_id}&autostart=1&quality=0&screenshare=1" 
                         style="width: 100%; height: 420px; border: 2px solid #4f46e5; border-radius: 12px; background: #000;"
                         allow="camera; microphone; autoplay; display-capture" allowfullscreen>
                 </iframe>
@@ -1724,6 +1755,83 @@ else:
             )
         else:
           st.info("لا توجد طلاب مشتركين حالياً لبدء الشات معهم.")
+      except:
+        pass
+
+  elif st.session_state.user_role == "مشرف":
+    if st.button("🚪 تسجيل الخروج"):
+      logout_user()
+      st.rerun()
+
+    st.subheader("🛡️ لوحة تحكم المشرف: معاذ السيد")
+    st.info("مرحباً بك يا بشمهندس معاذ، يمكنك من هنا متابعة الشكاوى والبلاغات ومراقبة سير العمل بالمنصة.")
+
+    sup_section = st.selectbox(
+        "اختر قسم الإشراف:",
+        [
+            "📢 قسم الشكاوى والبلاغات الواردة",
+            "👥 عرض قائمة المستخدمين والأساتذة",
+            "🎬 مراجعة المحتوى والفيديوهات",
+        ],
+    )
+    st.write("---")
+
+    if sup_section == "📢 قسم الشكاوى والبلاغات الواردة":
+      st.subheader("🚨 الشكاوى الموجهة للإدارة")
+      try:
+        with sqlite3.connect(DB_NAME) as conn:
+          c = conn.cursor()
+          c.execute(
+              "SELECT id, sender_phone, sender_name, role, complaint_text,"
+              " timestamp FROM complaints ORDER BY id DESC"
+          )
+          comps = c.fetchall()
+
+        if comps:
+          for c_id, c_ph, c_name, c_role, c_text, c_time in comps:
+            st.markdown(
+                f"""
+                        <div class='app-card'>
+                            <b>👤 المرسل:</b> {c_name} ({c_role})<br>
+                            <b>📞 الهاتف:</b> {c_ph}<br>
+                            <b>📝 الشكوى:</b> {c_text}<br>
+                            <b>⏰ الوقت:</b> {c_time}
+                        </div>
+                        """,
+                unsafe_allow_html=True,
+            )
+        else:
+          st.info("لا توجد شكاوى أو بلاغات حالياً.")
+      except:
+        pass
+
+    elif sup_section == "👥 عرض قائمة المستخدمين والأساتذة":
+      st.subheader("👥 نظرة عامة على مستخدمي المنصة")
+      try:
+        with sqlite3.connect(DB_NAME) as conn:
+          c = conn.cursor()
+          c.execute("SELECT name, phone, role FROM users")
+          all_usr = c.fetchall()
+        if all_usr:
+          for u_n, u_p, u_r in all_usr:
+            st.markdown(f"- **{u_n or 'مستخدم'}** | الهاتف: `{u_p}` | الصلاحية: `{u_r}`")
+        else:
+          st.info("لا يوجد مستخدمون.")
+      except:
+        pass
+
+    elif sup_section == "🎬 مراجعة المحتوى والفيديوهات":
+      st.subheader("🎬 الفيديوهات والمنشورات الحالية")
+      try:
+        with sqlite3.connect(DB_NAME) as conn:
+          c = conn.cursor()
+          c.execute("SELECT subject_name, title, teacher_phone FROM posts")
+          all_p_sup = c.fetchall()
+        if all_p_sup:
+          for p_sub, p_tit, p_tph in all_p_sup:
+            st.markdown(f"- مادة: `{p_sub}` | العنوان: **{p_tit}** | هاتف الأستاذ: `{p_tph}`")
+        else:
+          st.info("لا توجد منشورات مرفوعة.")
       except:
         pass
 
