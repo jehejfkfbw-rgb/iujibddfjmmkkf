@@ -15,6 +15,7 @@ st.markdown("""
     .stButton>button { width: 100%; font-weight: bold; border-radius: 8px; background-color: #2e7d32; color: white; height: 42px; }
     .profile-card { background-color: #0f172a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
     .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
+    .btn-external { display: inline-block; background-color: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 15px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -30,7 +31,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v5_live.db"
+DB_NAME = "nova_v6_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -204,21 +205,26 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
 
         st.divider()
         
-        # فحص البث المباشر الخاص بمادة الطالب فقط فورياً
+        # فحص البث المباشر المخصص لمادة الطالب
         is_live, room_id = check_course_live(student_course)
 
         if is_live:
-            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course}) - مرحباً بك في القاعة!</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
             display_name = stu['student_name'].replace(" ", "_")
             jitsi_url = f"https://meet.jit.si/{room_id}#userInfo.displayName=%22{display_name}%22"
             
+            # زر للفتح المباشر في نافذة خارجية لضمان عمل الصوت والصورة الشاشة بأعلى جودة
+            st.markdown(f'<a href="{jitsi_url}" target="_blank" class="btn-external">🖥️ فتح القاعة في نافذة جديدة بدقة عالية</a>', unsafe_allow_html=True)
+            
+            # مضاعفة تصاريح الـ iframe لتفعيل الصوت، المايك، الشاشة والكاميرا
             components.html(f"""
                 <iframe src="{jitsi_url}" 
-                        allow="camera; microphone; display-capture; autoplay; clipboard-write"
-                        style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
+                        allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
+                        allowfullscreen="true"
+                        style="height: 650px; width: 100%; border: 0px; border-radius: 12px;">
                 </iframe>
-            """, height=620)
+            """, height=670)
             
             st.divider()
             c1, c2 = st.columns(2)
@@ -342,7 +348,6 @@ else:
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
             
-            # توليد معرف غرفة تلقائي بناءً على المادة
             clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
             
             is_active, _ = check_course_live(target_course)
@@ -351,7 +356,7 @@ else:
             with col_b1:
                 if st.button(f"🚀 تشغيل البث فوراً لمادة: ({target_course})"):
                     set_course_live(target_course, True, clean_room_id)
-                    st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح! سيظهر للطلاب المسجلين بها فوراً.")
+                    st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح!")
                     st.rerun()
             
             with col_b2:
@@ -364,12 +369,16 @@ else:
             if is_active:
                 st.success(f"🔴 البث يعمل الآن بشكل مباشر لمادة: ({target_course})")
                 dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#userInfo.displayName=%22المطور_المحاضر%22"
+                
+                st.markdown(f'<a href="{dev_jitsi_url}" target="_blank" class="btn-external">🖥️ فتح غرفة المحاضر في نافذة مستقلة (لمشاركة الشاشة بدون أي قيود)</a>', unsafe_allow_html=True)
+                
                 components.html(f"""
                     <iframe src="{dev_jitsi_url}" 
-                            allow="camera; microphone; display-capture; autoplay; clipboard-write"
-                            style="height: 550px; width: 100%; border: 0px; border-radius: 12px;">
+                            allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
+                            allowfullscreen="true"
+                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
                     </iframe>
-                """, height=570)
+                """, height=620)
             else:
                 st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course})")
 
