@@ -1,12 +1,12 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # =========================================================
 # 1. إعدادات وتصميم الصفحة
 # =========================================================
-st.set_page_config(page_title="منصة نوفا التعليمية - نظام البث الفوري", page_icon="🌟", layout="wide")
+st.set_page_config(page_title="منصة نوفا التعليمية - نظام البث المباشر", page_icon="🌟", layout="wide")
 
 st.markdown("""
     <style>
@@ -15,11 +15,14 @@ st.markdown("""
     .stButton>button { width: 100%; font-weight: bold; border-radius: 8px; background-color: #2e7d32; color: white; height: 42px; }
     .profile-card { background-color: #0f172a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
     .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
-    .btn-external { display: inline-block; background-color: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 15px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
-# قائمة المواد الافتراضية
+# خوادم STUN المجانية من Google لتشغيل البث بدون مشاكل شبكة
+RTC_CONFIG = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
 AVAILABLE_COURSES = [
     "لغة بايثون - تعلم البرمجة للمبتدئين",
     "أساسيات البرمجة للمبتدئين",
@@ -31,13 +34,11 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v6_live.db"
+DB_NAME = "nova_v8_webrtc.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        
-        # 1. جدول الطلاب
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS student_codes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,17 +48,12 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # 2. جدول البث المباشر المخصص للمواد
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS course_live (
                 course_name TEXT PRIMARY KEY,
-                is_live TEXT DEFAULT 'false',
-                room_id TEXT
+                is_live TEXT DEFAULT 'false'
             )
         """)
-        
-        # 3. جدول التقييمات
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS live_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,8 +65,6 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # 4. جدول مواعيد المواد
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +76,6 @@ def init_db():
         """)
         conn.commit()
 
-# --- وظائف التحكم ---
 def add_student_code(code, name, course):
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -133,18 +126,18 @@ def check_course_live(course_name):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT is_live, room_id FROM course_live WHERE course_name = ?", (course_name.strip(),))
+        cursor.execute("SELECT is_live FROM course_live WHERE course_name = ?", (course_name.strip(),))
         res = cursor.fetchone()
         if res and res[0] == 'true':
-            return True, res[1]
-        return False, None
+            return True
+        return False
 
-def set_course_live(course_name, is_live, room_id):
+def set_course_live(course_name, is_live):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO course_live (course_name, is_live, room_id) VALUES (?, ?, ?)",
-                       (course_name.strip(), 'true' if is_live else 'false', room_id.strip()))
+        cursor.execute("INSERT OR REPLACE INTO course_live (course_name, is_live) VALUES (?, ?)",
+                       (course_name.strip(), 'true' if is_live else 'false'))
         conn.commit()
 
 def save_feedback(code, name, course, rating, message):
@@ -190,7 +183,7 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         st.markdown(f"""
             <div class="profile-card">
                 <h3>👤 مرحباً بك: {stu['student_name']}</h3>
-                <p>📚 <b>المادة/الكورس المسجل فيه:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
+                <p>📚 <b>المادة/الكورس:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
             </div>
         """, unsafe_allow_html=True)
         
@@ -205,26 +198,19 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
 
         st.divider()
         
-        # فحص البث المباشر المخصص لمادة الطالب
-        is_live, room_id = check_course_live(student_course)
+        is_live = check_course_live(student_course)
 
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
+            st.info("اضغط على زر SELECT MEDIA أو START بالأسفل للاستماع لمحادثة المعلم ومشاهدة الشاشة المعروضة.")
             
-            display_name = stu['student_name'].replace(" ", "_")
-            jitsi_url = f"https://meet.jit.si/{room_id}#userInfo.displayName=%22{display_name}%22"
-            
-            # زر للفتح المباشر في نافذة خارجية لضمان عمل الصوت والصورة الشاشة بأعلى جودة
-            st.markdown(f'<a href="{jitsi_url}" target="_blank" class="btn-external">🖥️ فتح القاعة في نافذة جديدة بدقة عالية</a>', unsafe_allow_html=True)
-            
-            # مضاعفة تصاريح الـ iframe لتفعيل الصوت، المايك، الشاشة والكاميرا
-            components.html(f"""
-                <iframe src="{jitsi_url}" 
-                        allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
-                        allowfullscreen="true"
-                        style="height: 650px; width: 100%; border: 0px; border-radius: 12px;">
-                </iframe>
-            """, height=670)
+            # عرض بث المعلم للطالب (استقبال فيديو وصوت)
+            webrtc_streamer(
+                key=f"student_stream_{student_course}",
+                mode=WebRtcMode.RECVONLY,
+                rtc_configuration=RTC_CONFIG,
+                media_stream_constraints={"video": True, "audio": True}
+            )
             
             st.divider()
             c1, c2 = st.columns(2)
@@ -245,7 +231,6 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
             st.subheader(f"📅 مواعيد وجدول مادة: ({student_course})")
             
             df_sch = get_student_schedule(student_course)
-            
             if df_sch.empty:
                 st.warning("لم يقم المطور بإضافة مواعيد لهذه المادة بعد.")
             else:
@@ -263,7 +248,6 @@ else:
         
         t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جدول المواعيد والبث", "🎙️ التحكم بالبث المباشر للمواد", "📊 التقييمات"])
 
-        # Tab 1: الأكواد
         with t1:
             st.subheader("➕ إضافة كود طالب وتحديد المادة")
             with st.form("add_code_form"):
@@ -306,7 +290,6 @@ else:
                             st.success("تم المسح.")
                             st.rerun()
 
-        # Tab 2: الجدول
         with t2:
             st.subheader("➕ إضافة موعد وموعد البث القادم للمادة")
             with st.form("add_sched_form"):
@@ -342,47 +325,41 @@ else:
                                 delete_schedule_item(sr['id'])
                                 st.rerun()
 
-        # Tab 3: البث المباشر المخصص لكل مادة
         with t3:
-            st.subheader("🎙️ إدارة وتشغيل البث المباشر الفوري للمواد")
+            st.subheader("🎙️ بث المحاضرة ومشاركة الشاشة للمطور")
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
-            
-            clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
-            
-            is_active, _ = check_course_live(target_course)
+            is_active = check_course_live(target_course)
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button(f"🚀 تشغيل البث فوراً لمادة: ({target_course})"):
-                    set_course_live(target_course, True, clean_room_id)
-                    st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح!")
+                if st.button(f"🚀 تشغيل حالة البث للمادة: ({target_course})"):
+                    set_course_live(target_course, True)
+                    st.success(f"تم فتح حالة البث المباشر لمادة ({target_course}) بنجاح!")
                     st.rerun()
             
             with col_b2:
-                if st.button(f"🛑 إيقاف البث لمادة: ({target_course})"):
-                    set_course_live(target_course, False, clean_room_id)
+                if st.button(f"🛑 إيقاف البث للمادة: ({target_course})"):
+                    set_course_live(target_course, False)
                     st.warning(f"تم إغلاق البث المباشر لمادة ({target_course}).")
                     st.rerun()
 
             st.divider()
             if is_active:
-                st.success(f"🔴 البث يعمل الآن بشكل مباشر لمادة: ({target_course})")
-                dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#userInfo.displayName=%22المطور_المحاضر%22"
-                
-                st.markdown(f'<a href="{dev_jitsi_url}" target="_blank" class="btn-external">🖥️ فتح غرفة المحاضر في نافذة مستقلة (لمشاركة الشاشة بدون أي قيود)</a>', unsafe_allow_html=True)
-                
-                components.html(f"""
-                    <iframe src="{dev_jitsi_url}" 
-                            allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
-                            allowfullscreen="true"
-                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
-                    </iframe>
-                """, height=620)
+                st.success(f"🔴 البث محدد كـ (شغال) لمادة: ({target_course})")
+                st.write("💡 **كيف تشارك الشاشة والصوت؟**")
+                st.write("1. اضغط على **START** بالأسفل.")
+                st.write("2. عند ظهور نافذة تصريح المتصفح، اختر **Window** أو **Entire Screen** للبدء بمشاركة الشاشة بدلاً من الكاميرا.")
+
+                webrtc_streamer(
+                    key=f"dev_stream_{target_course}",
+                    mode=WebRtcMode.SENDONLY,
+                    rtc_configuration=RTC_CONFIG,
+                    media_stream_constraints={"video": True, "audio": True}
+                )
             else:
                 st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course})")
 
-        # Tab 4: التقييمات
         with t4:
             st.subheader("📊 رسائل وتقييمات الطلاب")
             with sqlite3.connect(DB_NAME) as conn:
