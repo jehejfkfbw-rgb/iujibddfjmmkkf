@@ -29,7 +29,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v11_modern_live.db"
+DB_NAME = "nova_v13_perfect_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -199,12 +199,12 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
-            # مشغل محلي حديث ومباشر للطالب
-            live_url = f"https://vdo.ninja/?room={room_id}&push=false&webcam=false"
+            # الرابط الصحيح للاستقبال الصافي (يعرض بث المطور مباشرة بدون أي إعدادات كاميرا للطالب)
+            student_view_url = f"https://vdo.ninja/?room={room_id}&view=1&autoplay=1&muted=0"
             
             components.html(f"""
-                <iframe src="{live_url}" 
-                        allow="camera; microphone; autoplay; fullscreen"
+                <iframe src="{student_view_url}" 
+                        allow="autoplay; fullscreen; microphone; speaker"
                         style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
                 </iframe>
             """, height=620)
@@ -323,7 +323,7 @@ else:
                                 st.rerun()
 
         with t3:
-            st.subheader("🎙️ إدارة البث المباشر (مظهر حديث ومباشر)")
+            st.subheader("🎙️ لوحة التحكم ببث المطور (شاشة أو كاميرا)")
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
             clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
@@ -345,14 +345,16 @@ else:
 
             st.divider()
             if is_active:
-                st.success(f"🔴 البث محدد كـ (مباشر) لمادة: ({target_course})")
+                st.success(f"🔴 البث يعمل الآن لمادة: ({target_course})")
                 
-                source_type = st.radio("اختر مصدر البث المراد تشغيله الآن:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب Direct"])
+                source_type = st.radio("اختر ماذا تريد أن تبث للطلاب من لابتوبك:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب المباشرة"])
                 
                 if "شاشة" in source_type:
                     dev_push_url = f"https://vdo.ninja/?room={clean_room_id}&screenshare=1&push=true"
                 else:
                     dev_push_url = f"https://vdo.ninja/?room={clean_room_id}&webcam=true&push=true"
+
+                st.info("📌 **تعليمات للمطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
 
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
