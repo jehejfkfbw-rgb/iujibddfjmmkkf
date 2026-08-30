@@ -142,7 +142,6 @@ def check_course_live(course_name):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        # فحص صارم للمادة المحددة فقط بالاسم بدقة
         cursor.execute("SELECT is_live, room_id FROM course_live WHERE course_name = ?", (course_name.strip(),))
         res = cursor.fetchone()
         if res and res[0] == 'true':
@@ -235,7 +234,8 @@ if page == "🔴 قاعة الطالب وبث المادة":
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
             
             specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
-            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay&codec=vp8&clean"
+            # رابط البث مع تفعيل العرض الكامل (cover) وجودة 720p مستقرة (quality=1)
+            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay&codec=vp8&quality=1&clean&cover"
             
             st.markdown(f"""
                 <a href="{student_view_url}" target="_blank" class="direct-link-btn">
@@ -245,13 +245,13 @@ if page == "🔴 قاعة الطالب وبث المادة":
             
             col_v1, col_v2 = st.columns([2, 1])
             with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة داخل الصفحة:")
+                st.info("📌 مشغل الفيديو المباشر للمادة داخل الصفحة (عرض كامل 720p):")
                 components.html(f"""
                     <iframe src="{student_view_url}" 
                             allow="autoplay; fullscreen; microphone; speaker; display-capture"
-                            style="height: 480px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
+                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #000; object-fit: cover;">
                     </iframe>
-                """, height=500)
+                """, height=620)
             
             with col_v2:
                 st.subheader("💬 شات التعليقات والأسئلة")
@@ -288,7 +288,6 @@ if page == "🔴 قاعة الطالب وبث المادة":
                     else:
                         st.warning("يرجى كتابة الرسالة.")
         else:
-            # لو البث مش شغال للمادة دي، تظهر رسالة التوقف + جدول المواعيد المستقل للمادة وحدها
             st.warning(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}). تابع الجدول أدناه لمعرفة موعد المحاضرة القادمة.")
             
             st.subheader(f"📅 جدول مواعيد الحصص والبث القادم لمادتك فقط: ({student_course})")
