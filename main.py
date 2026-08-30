@@ -29,7 +29,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v10_direct_live.db"
+DB_NAME = "nova_v11_modern_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -199,14 +199,13 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
-            display_name = stu['student_name'].replace(" ", "_")
-            jitsi_url = f"https://meet.jit.si/{room_id}#userInfo.displayName=%22{display_name}%22"
+            # مشغل محلي حديث ومباشر للطالب
+            live_url = f"https://vdo.ninja/?room={room_id}&push=false&webcam=false"
             
             components.html(f"""
-                <iframe src="{jitsi_url}" 
-                        allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
-                        allowfullscreen="true"
-                        style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
+                <iframe src="{live_url}" 
+                        allow="camera; microphone; autoplay; fullscreen"
+                        style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
                 </iframe>
             """, height=620)
             
@@ -324,7 +323,7 @@ else:
                                 st.rerun()
 
         with t3:
-            st.subheader("🎙️ إدارة البث المباشر (الكاميرا وشاشة اللابتوب)")
+            st.subheader("🎙️ إدارة البث المباشر (مظهر حديث ومباشر)")
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
             clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
@@ -346,21 +345,19 @@ else:
 
             st.divider()
             if is_active:
-                st.success(f"🔴 البث يعمل الآن بشكل مباشر لمادة: ({target_course})")
+                st.success(f"🔴 البث محدد كـ (مباشر) لمادة: ({target_course})")
                 
-                # خيار مباشر بين الشاشة والكاميرا
-                choice = st.radio("اختر مصدر البث في الواجهة:", ["🖥️ مشاركة شاشة اللابتوب", "📷 كاميرا اللابتوب المباشرة"])
+                source_type = st.radio("اختر مصدر البث المراد تشغيله الآن:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب Direct"])
                 
-                if "مشاركة شاشة" in choice:
-                    dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#config.startScreenSharing=true&userInfo.displayName=%22المطور_المحاضر%22"
+                if "شاشة" in source_type:
+                    dev_push_url = f"https://vdo.ninja/?room={clean_room_id}&screenshare=1&push=true"
                 else:
-                    dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#config.startWithVideoMuted=false&userInfo.displayName=%22المطور_المحاضر%22"
+                    dev_push_url = f"https://vdo.ninja/?room={clean_room_id}&webcam=true&push=true"
 
                 components.html(f"""
-                    <iframe src="{dev_jitsi_url}" 
-                            allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
-                            allowfullscreen="true"
-                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
+                    <iframe src="{dev_push_url}" 
+                            allow="camera; microphone; display-capture; autoplay"
+                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #111;">
                     </iframe>
                 """, height=620)
             else:
