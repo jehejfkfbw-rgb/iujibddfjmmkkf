@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # =========================================================
 # 1. إعدادات وتصميم الصفحة
 # =========================================================
-st.set_page_config(page_title="منصة نوفا التعليمية - البث المباشر", page_icon="🌟", layout="wide")
+st.set_page_config(page_title="منصة نوفا التعليمية", page_icon="🌟", layout="wide")
 
 st.markdown("""
     <style>
@@ -20,25 +20,31 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# خريطة لربط اسم المادة بـ Room ID قصير وثابت ومضمون 100%
+# المواد المتاحة على المنصة
+AVAILABLE_COURSES = [
+    "لغة بايثون - تعلم البرمجة للمبتدئين",
+    "أساسيات البرمجة للمبتدئين",
+    "تطوير تطبيقات الويب (Streamlit & Flask)",
+    "تطوير الألعاب (Godot & Pygame)"
+]
+
+# خريطة لربط اسم المادة بغرفة بث ثابتة ومستقرة
 COURSE_ROOMS = {
     "لغة بايثون - تعلم البرمجة للمبتدئين": "nova_python_room_2026",
     "أساسيات البرمجة للمبتدئين": "nova_basics_room_2026",
     "تطوير تطبيقات الويب (Streamlit & Flask)": "nova_web_room_2026",
-    "تطوير الألعاب (Godot & Pygame)": "nova_games_room_2026",
-    "مادة المشمش": "nova_apricot_room_2026"
+    "تطوير الألعاب (Godot & Pygame)": "nova_games_room_2026"
 }
-
-AVAILABLE_COURSES = list(COURSE_ROOMS.keys())
 
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v20_perfect_live.db"
+DB_NAME = "nova_final_system.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
+        # جدول أكواد الطلاب والمادة المخصصة لكل طالب
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS student_codes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +54,7 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # جدول حالة البث المباشر لكل مادة (يتحكم فيه المطور)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS course_live (
                 course_name TEXT PRIMARY KEY,
@@ -55,6 +62,17 @@ def init_db():
                 room_id TEXT
             )
         """)
+        # جدول مواعيد الحصص والبث القادم
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schedule (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_name TEXT NOT NULL,
+                day TEXT NOT NULL,
+                time_slot TEXT NOT NULL,
+                next_live_info TEXT
+            )
+        """)
+        # جدول تقييمات واستفسارات الطلاب
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS live_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,15 +84,6 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS schedule (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                course_name TEXT NOT NULL,
-                day TEXT NOT NULL,
-                time_slot TEXT NOT NULL,
-                next_live_info TEXT
-            )
-        """)
         conn.commit()
 
 def add_student_code(code, name, course):
@@ -84,7 +93,7 @@ def add_student_code(code, name, course):
             cursor.execute("INSERT INTO student_codes (student_code, student_name, course_name) VALUES (?, ?, ?)",
                            (code.strip(), name.strip(), course.strip()))
             conn.commit()
-            return True, "تمت إضافة الكود وتخصيص المادة بنجاح!"
+            return True, "تمت إضافة الطالب وتخصيص المادة بنجاح!"
     except sqlite3.IntegrityError:
         return False, "⚠️ هذا الكود موجود بالفعل في النظام."
     except Exception as e:
@@ -115,7 +124,7 @@ def add_schedule_item(course, day, time_slot, next_live_info):
 def get_student_schedule(course_name):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
-        return pd.read_sql_query("SELECT day AS 'اليوم', time_slot AS 'الموعد', next_live_info AS 'موعد البث القادم' FROM schedule WHERE course_name = ?", conn, params=(course_name,))
+        return pd.read_sql_query("SELECT day AS 'اليوم', time_slot AS 'موعد الحصة', next_live_info AS 'تفاصيل البث القادم' FROM schedule WHERE course_name = ?", conn, params=(course_name,))
 
 def delete_schedule_item(item_id):
     with sqlite3.connect(DB_NAME) as conn:
@@ -154,37 +163,37 @@ def save_feedback(code, name, course, rating, message):
 # =========================================================
 init_db()
 
-page = st.sidebar.radio("التنقل:", ["🔴 القاعة والبث المباشر (للطالب)", "⚙️ لوحة تحكم المطور"])
+page = st.sidebar.radio("التنقل:", ["🔴 قاعة الطالب وبث المادة", "⚙️ لوحة تحكم المطور"])
 
 # ---------------------------------------------------------
 # واجهة الطالب
 # ---------------------------------------------------------
-if page == "🔴 القاعة والبث المباشر (للطالب)":
-    st.title("🌟 منصة نوفا التعليمية - دخول القاعة")
+if page == "🔴 قاعة الطالب وبث المادة":
+    st.title("🌟 منصة نوفا التعليمية - بوابة الطالب")
 
     if "logged_student" not in st.session_state:
         st.session_state.logged_student = None
 
     if st.session_state.logged_student is None:
-        st.subheader("🔑 تسجيل الدخول بالكود")
-        input_code = st.text_input("أدخل كود الطالب المعتمد من المطور:", placeholder="مثال: NOVA-1001")
+        st.subheader("🔑 تسجيل الدخول بالكود المعتمد")
+        input_code = st.text_input("أدخل كود الطالب الخاص بك:", placeholder="مثال: NOVA-1001")
         
-        if st.button("دخول القاعة 🚀"):
+        if st.button("دخول القاعة الدراسية 🚀"):
             stu = verify_student(input_code)
             if stu:
                 st.session_state.logged_student = stu
-                st.success("تم التحقق ودخول القاعة بنجاح!")
+                st.success("تم التحقق بنجاح، أهلاً بك في قاعتك!")
                 st.rerun()
             else:
-                st.error("❌ هذا الكود غير موجود أو غير مفعل. يرجى مراجعة المطور.")
+                st.error("❌ هذا الكود غير صحيح أو لم يتم تفعيله من قبل المطور.")
     else:
         stu = st.session_state.logged_student
         student_course = stu['course_name']
         
         st.markdown(f"""
             <div class="profile-card">
-                <h3>👤 مرحباً بك: {stu['student_name']}</h3>
-                <p>📚 <b>المادة/الكورس:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
+                <h3>👤 الطالب: {stu['student_name']}</h3>
+                <p>📚 <b>مادتك الدراسية المخصصة:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
             </div>
         """, unsafe_allow_html=True)
         
@@ -199,23 +208,23 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
 
         st.divider()
         
+        # فحص هل البث شغال لهذه المادة بالذات أم لا؟
         is_live, room_id = check_course_live(student_course)
 
         if is_live:
-            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك: ({student_course})</div>", unsafe_allow_html=True)
             
-            # استخدام الـ Room ID الثابت الخاص بالمادة لمنع أي شاشة سوداء
             fixed_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
             student_view_url = f"https://vdo.ninja/?view={fixed_room}&autoplay&codec=vp8&clean"
             
-            # زر مباشر خارجي يفتح البث في نافذة مستقلة فوراً لضمان عمل الفيديو
+            # زر مباشر خارجي لضمان تشغيل الفيديو بسلاسة تامة بدون أي شاشة سوداء
             st.markdown(f"""
                 <a href="{student_view_url}" target="_blank" class="direct-link-btn">
-                    🚀 اضغط هنا لفتح البث المباشر فوراً (شاشة كاملة وبدون أي مشاكل)
+                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة وبأعلى جودة)
                 </a>
             """, unsafe_allow_html=True)
             
-            st.info("📌 المشغل أدناه يعرض البث مباشرة، وإذا ظهرت شاشة سوداء اضغط على الزر الأحمر بالأعلى ليفتح البث في تاب مستقل عندك:")
+            st.info("📌 المشغل أدناه يعرض البث مباشرة داخل الصفحة:")
 
             components.html(f"""
                 <iframe src="{student_view_url}" 
@@ -231,20 +240,21 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
                 rating = st.slider("نسبة التقييم (%):", 0, 100, 95, step=5)
             with c2:
                 st.subheader("💬 إرسال استفسار للمطور")
-                msg = st.text_area("أكتب استفسارك هنا:")
-                if st.button("إرسال التقييم 📤"):
+                msg = st.text_area("اكتب رسالتك أو سؤالك هنا:")
+                if st.button("إرسال الاستفسار 📤"):
                     if msg.strip():
                         save_feedback(stu['student_code'], stu['student_name'], student_course, rating, msg)
-                        st.success("تم إرسال الرسالة بنجاح!")
+                        st.success("تم إرسال رسالتك بنجاح للمطور!")
                     else:
                         st.warning("يرجى كتابة الرسالة أولاً.")
         else:
-            st.info(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}).")
-            st.subheader(f"📅 مواعيد وجدول مادة: ({student_course})")
+            # رسالة واضحة تماماً لو مفيش بث شغال
+            st.warning(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}). انتظر موعد المحاضرة القادمة.")
             
+            st.subheader(f"📅 جدول مواعيد ومواعيد البث القادم لمادة: ({student_course})")
             df_sch = get_student_schedule(student_course)
             if df_sch.empty:
-                st.warning("لم يقم المطور بإضافة مواعيد لهذه المادة بعد.")
+                st.info("لم يقم المطور بإضافة جدول مواعيد لهذه المادة حتى الآن.")
             else:
                 st.dataframe(df_sch, use_container_width=True)
 
@@ -252,16 +262,16 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
 # واجهة المطور
 # ---------------------------------------------------------
 else:
-    st.title("⚙️ لوحة إدارة منصة نوفا")
+    st.title("⚙️ لوحة إدارة منصة نوفا (المطور)")
     admin_pass = st.text_input("كلمة سر المطور:", type="password")
 
     if admin_pass == st.secrets.get("ADMIN_PASSWORD", "2010"):
-        st.success("أهلاً بك يا مطور المنصة 👋")
+        st.success("أهلاً بك يا مطور المنصة الفريد 👋")
         
-        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جدول المواعيد والبث", "🎙️ التحكم بالبث المباشر للمواد", "📊 التقييمات"])
+        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جدول المواعيد والبث", "🎙️ تشغيل وإيقاف البث للمواد", "📊 رسائل الطلاب"])
 
         with t1:
-            st.subheader("➕ إضافة كود طالب وتحديد المادة")
+            st.subheader("➕ إضافة كود طالب جديد وتخصيص مادته الدراسية")
             with st.form("add_code_form"):
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -269,9 +279,9 @@ else:
                 with col2:
                     new_name = st.text_input("اسم الطالب الرباعي:")
                 with col3:
-                    new_course = st.selectbox("اختر المادة/الكورس:", AVAILABLE_COURSES)
+                    new_course = st.selectbox("اختر المادة المخصصة له:", AVAILABLE_COURSES)
                 
-                btn_save = st.form_submit_button("حفظ الكود 💾")
+                btn_save = st.form_submit_button("حفظ الطالب والكود 💾")
 
             if btn_save:
                 if new_code and new_name and new_course:
@@ -282,47 +292,47 @@ else:
                     else:
                         st.error(msg)
                 else:
-                    st.error("يرجى إدخال كافة البيانات.")
+                    st.error("يرجى إكمال كافة البيانات المطلوبة.")
 
             st.divider()
-            st.subheader("📋 الأكواد المحفوظة")
+            st.subheader("📋 قائمة الطلاب المسجلين والأكواد")
             with sqlite3.connect(DB_NAME) as conn:
                 df_codes = pd.read_sql_query("SELECT id, student_code, student_name, course_name FROM student_codes", conn)
 
             if df_codes.empty:
-                st.info("لا توجد أكواد محفوظة.")
+                st.info("لا توجد أكواد مسجلة حالياً.")
             else:
                 for _, r in df_codes.iterrows():
                     col_a, col_b = st.columns([4, 1])
                     with col_a:
                         st.write(f"🔑 **{r['student_code']}** | 👤 {r['student_name']} | 📚 المادة: **{r['course_name']}**")
                     with col_b:
-                        if st.button("حذف الكود 🗑️", key=f"del_{r['id']}"):
+                        if st.button("حذف 🗑️", key=f"del_{r['id']}"):
                             delete_student_code(r['id'])
-                            st.success("تم المسح.")
+                            st.success("تم الحذف.")
                             st.rerun()
 
         with t2:
-            st.subheader("➕ إضافة موعد وموعد البث القادم للمادة")
+            st.subheader("➕ تحديد مواعيد الحصص وموعد البث القادم لكل مادة")
             with st.form("add_sched_form"):
                 c1, c2 = st.columns(2)
                 with c1:
-                    sched_course = st.selectbox("حدد المادة:", AVAILABLE_COURSES)
+                    sched_course = st.selectbox("اختر المادة:", AVAILABLE_COURSES, key="sc_course")
                     sched_day = st.selectbox("اليوم:", ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"])
                 with c2:
                     sched_time = st.text_input("موعد الحصة:", placeholder="مثال: الساعة 8:00 مساءً")
-                    sched_next = st.text_input("تاريخ ووقت البث القادم:", placeholder="مثال: يوم الجمعة القادم الساعة 9:00 مساءً")
+                    sched_next = st.text_input("موعد البث القادم بالتفصيل:", placeholder="مثال: الجمعة القادمة الساعة 9 م")
                 
-                btn_sched = st.form_submit_button("حفظ الموعد 💾")
+                btn_sched = st.form_submit_button("حفظ الموعد والجدول 💾")
 
             if btn_sched:
                 if sched_course and sched_time:
                     add_schedule_item(sched_course, sched_day, sched_time, sched_next)
-                    st.success("تم حفظ الموعد بنجاح!")
+                    st.success("تم حفظ موعد المادة بنجاح!")
                     st.rerun()
 
             st.divider()
-            st.subheader("📋 المواعيد المضافة")
+            st.subheader("📋 المواعيد المسجلة في النظام")
             with sqlite3.connect(DB_NAME) as conn:
                 df_all_sch = pd.read_sql_query("SELECT id, course_name, day, time_slot, next_live_info FROM schedule", conn)
                 if df_all_sch.empty:
@@ -333,43 +343,43 @@ else:
                         with ca:
                             st.write(f"📚 **المادة:** {sr['course_name']} | 🗓️ **اليوم:** {sr['day']} | ⏰ **الموعد:** {sr['time_slot']} | 🔴 **البث القادم:** {sr['next_live_info']}")
                         with cb:
-                            if st.button("حذف 🗑️", key=f"del_sch_{sr['id']}"):
+                            if st.button("حذف الموعد 🗑️", key=f"del_sch_{sr['id']}"):
                                 delete_schedule_item(sr['id'])
                                 st.rerun()
 
         with t3:
-            st.subheader("🎙️ لوحة التحكم ببث المطور (شاشة أو كاميرا)")
+            st.subheader("🎙️ التحكم المركزي ببث المواد (شاشة أو كاميرا)")
             
-            target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
+            target_course = st.selectbox("اختر المادة المراد التحكم ببثها الآن:", AVAILABLE_COURSES, key="live_target")
             fixed_room = COURSE_ROOMS.get(target_course, "nova_default_room_2026")
             
             is_active, _ = check_course_live(target_course)
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button(f"🚀 تشغيل البث فوراً لمادة: ({target_course})"):
+                if st.button(f"🚀 فتح وإذاعة البث الآن لمادة: ({target_course})"):
                     set_course_live(target_course, True, fixed_room)
-                    st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح!")
+                    st.success(f"تم تفعيل البث المباشر لمادة ({target_course}) بنجاح! سيظهر الآن لطلاب هذه المادة فقط.")
                     st.rerun()
             
             with col_b2:
                 if st.button(f"🛑 إيقاف البث لمادة: ({target_course})"):
                     set_course_live(target_course, False, fixed_room)
-                    st.warning(f"تم إغلاق البث المباشر لمادة ({target_course}).")
+                    st.warning(f"تم إغلاق البث المباشر لهذه المادة وتحويل الطلاب لصفحة المواعيد.")
                     st.rerun()
 
             st.divider()
             if is_active:
-                st.success(f"🔴 البث يعمل الآن لمادة: ({target_course})")
+                st.success(f"🔴 البث حالياً **مفتوح** ويعمل لمادة: ({target_course})")
                 
-                source_type = st.radio("اختر ماذا تريد أن تبث للطلاب من لابتوبك:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب المباشرة"])
+                source_type = st.radio("اختر وسيلة الإرسال من لابتوبك:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب"])
                 
                 if "شاشة" in source_type:
                     dev_push_url = f"https://vdo.ninja/?push={fixed_room}&screenshare&quality=0&autostart"
                 else:
                     dev_push_url = f"https://vdo.ninja/?push={fixed_room}&webcam&quality=0&autostart"
 
-                st.info("📌 **تعليمات المطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
+                st.info("📌 **خطوة للمطور:** اضغط على زر (Start) داخل مشغل الإرسال أدناه، ووافق على إذن الشاشة أو الكاميرا ليبدأ البث فوراً للطلاب.")
 
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
@@ -378,10 +388,10 @@ else:
                     </iframe>
                 """, height=620)
             else:
-                st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course})")
+                st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course}). الطلاب سيرون رسالة (لا يوجد بث مباشر حالياً) مع الجدول.")
 
         with t4:
-            st.subheader("📊 رسائل وتقييمات الطلاب")
+            st.subheader("📊 رسائل واستفسارات الطلاب الواردة")
             with sqlite3.connect(DB_NAME) as conn:
-                df_fb = pd.read_sql_query("SELECT student_code AS 'الكود', student_name AS 'الاسم', course_name AS 'المادة', rating AS 'التقييم %', message AS 'الرسالة', created_at AS 'التاريخ' FROM live_feedback ORDER BY id DESC", conn)
+                df_fb = pd.read_sql_query("SELECT student_code AS 'الكود', student_name AS 'اسم الطالب', course_name AS 'المادة', rating AS 'التقييم %', message AS 'الرسالة', created_at AS 'التاريخ' FROM live_feedback ORDER BY id DESC", conn)
                 st.dataframe(df_fb, use_container_width=True)
