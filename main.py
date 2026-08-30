@@ -15,21 +15,26 @@ st.markdown("""
     .stButton>button { width: 100%; font-weight: bold; border-radius: 8px; background-color: #2e7d32; color: white; height: 42px; }
     .profile-card { background-color: #0f172a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
     .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
+    .direct-link-btn { display: block; width: 100%; background-color: #dc2626; color: white; padding: 14px; text-align: center; border-radius: 8px; font-weight: bold; font-size: 18px; text-decoration: none; margin-bottom: 15px; }
+    .direct-link-btn:hover { background-color: #b91c1c; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-AVAILABLE_COURSES = [
-    "لغة بايثون - تعلم البرمجة للمبتدئين",
-    "أساسيات البرمجة للمبتدئين",
-    "تطوير تطبيقات الويب (Streamlit & Flask)",
-    "تطوير الألعاب (Godot & Pygame)",
-    "مادة المشمش"
-]
+# خريطة لربط اسم المادة بـ Room ID قصير وثابت ومضمون 100%
+COURSE_ROOMS = {
+    "لغة بايثون - تعلم البرمجة للمبتدئين": "nova_python_room_2026",
+    "أساسيات البرمجة للمبتدئين": "nova_basics_room_2026",
+    "تطوير تطبيقات الويب (Streamlit & Flask)": "nova_web_room_2026",
+    "تطوير الألعاب (Godot & Pygame)": "nova_games_room_2026",
+    "مادة المشمش": "nova_apricot_room_2026"
+}
+
+AVAILABLE_COURSES = list(COURSE_ROOMS.keys())
 
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v18_perfect_live.db"
+DB_NAME = "nova_v20_perfect_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -199,18 +204,25 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
-            # تثبيت معرف الغرفة بشكل قياسي ومباشر للطالب تماماً مثل المطور
-            clean_room_id = "nova_room_" + "".join([c for c in student_course if c.isalnum()])
-            student_view_url = f"https://vdo.ninja/?view={clean_room_id}&autoplay&codec=vp8&enhance"
+            # استخدام الـ Room ID الثابت الخاص بالمادة لمنع أي شاشة سوداء
+            fixed_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
+            student_view_url = f"https://vdo.ninja/?view={fixed_room}&autoplay&codec=vp8&clean"
             
-            st.info("💡 **ملاحظة للطالب:** إذا ظهرت الشاشة سوداء في البداية، اضغط مرة واحدة داخل مربع الفيديو أو اضغط على أي مكان لتفعيل الصوت والصورة من المتصفح.")
+            # زر مباشر خارجي يفتح البث في نافذة مستقلة فوراً لضمان عمل الفيديو
+            st.markdown(f"""
+                <a href="{student_view_url}" target="_blank" class="direct-link-btn">
+                    🚀 اضغط هنا لفتح البث المباشر فوراً (شاشة كاملة وبدون أي مشاكل)
+                </a>
+            """, unsafe_allow_html=True)
+            
+            st.info("📌 المشغل أدناه يعرض البث مباشرة، وإذا ظهرت شاشة سوداء اضغط على الزر الأحمر بالأعلى ليفتح البث في تاب مستقل عندك:")
 
             components.html(f"""
                 <iframe src="{student_view_url}" 
                         allow="autoplay; fullscreen; microphone; speaker; display-capture"
-                        style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
+                        style="height: 550px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
                 </iframe>
-            """, height=620)
+            """, height=570)
             
             st.divider()
             c1, c2 = st.columns(2)
@@ -329,20 +341,20 @@ else:
             st.subheader("🎙️ لوحة التحكم ببث المطور (شاشة أو كاميرا)")
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
-            clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
+            fixed_room = COURSE_ROOMS.get(target_course, "nova_default_room_2026")
             
             is_active, _ = check_course_live(target_course)
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button(f"🚀 تشغيل البث فوراً لمادة: ({target_course})"):
-                    set_course_live(target_course, True, clean_room_id)
+                    set_course_live(target_course, True, fixed_room)
                     st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح!")
                     st.rerun()
             
             with col_b2:
                 if st.button(f"🛑 إيقاف البث لمادة: ({target_course})"):
-                    set_course_live(target_course, False, clean_room_id)
+                    set_course_live(target_course, False, fixed_room)
                     st.warning(f"تم إغلاق البث المباشر لمادة ({target_course}).")
                     st.rerun()
 
@@ -353,9 +365,9 @@ else:
                 source_type = st.radio("اختر ماذا تريد أن تبث للطلاب من لابتوبك:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب المباشرة"])
                 
                 if "شاشة" in source_type:
-                    dev_push_url = f"https://vdo.ninja/?push={clean_room_id}&screenshare&quality=0&autostart"
+                    dev_push_url = f"https://vdo.ninja/?push={fixed_room}&screenshare&quality=0&autostart"
                 else:
-                    dev_push_url = f"https://vdo.ninja/?push={clean_room_id}&webcam&quality=0&autostart"
+                    dev_push_url = f"https://vdo.ninja/?push={fixed_room}&webcam&quality=0&autostart"
 
                 st.info("📌 **تعليمات المطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
 
