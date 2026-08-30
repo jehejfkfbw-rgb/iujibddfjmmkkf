@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # =========================================================
 # 1. إعدادات وتصميم الصفحة
 # =========================================================
-st.set_page_config(page_title="منصة نوفا التعليمية - نظام البث المتقدم", page_icon="🌟", layout="wide")
+st.set_page_config(page_title="منصة نوفا التعليمية - نظام البث الفوري", page_icon="🌟", layout="wide")
 
 st.markdown("""
     <style>
@@ -14,14 +14,23 @@ st.markdown("""
     div[data-baseweb="input"] { text-align: right; }
     .stButton>button { width: 100%; font-weight: bold; border-radius: 8px; background-color: #2e7d32; color: white; height: 42px; }
     .profile-card { background-color: #0f172a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-    .live-active { background-color: #15803d; color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; }
+    .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
     </style>
 """, unsafe_allow_html=True)
+
+# قائمة المواد الافتراضية
+AVAILABLE_COURSES = [
+    "لغة بايثون - تعلم البرمجة للمبتدئين",
+    "أساسيات البرمجة للمبتدئين",
+    "تطوير تطبيقات الويب (Streamlit & Flask)",
+    "تطوير الألعاب (Godot & Pygame)",
+    "مادة المشمش"
+]
 
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v4_system.db"
+DB_NAME = "nova_v5_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -38,7 +47,7 @@ def init_db():
             )
         """)
         
-        # 2. جدول البث المباشر (مربوط بكل مادة)
+        # 2. جدول البث المباشر المخصص للمواد
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS course_live (
                 course_name TEXT PRIMARY KEY,
@@ -180,17 +189,22 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         st.markdown(f"""
             <div class="profile-card">
                 <h3>👤 مرحباً بك: {stu['student_name']}</h3>
-                <p>📚 <b>المادة/الكورس:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
+                <p>📚 <b>المادة/الكورس المسجل فيه:</b> <span style="color: #4ade80; font-size: 18px;">{student_course}</span> | 🔑 <b>الكود:</b> {stu['student_code']}</p>
             </div>
         """, unsafe_allow_html=True)
         
-        if st.button("تسجيل خروج"):
-            st.session_state.logged_student = None
-            st.rerun()
+        col_nav1, col_nav2 = st.columns([4, 1])
+        with col_nav2:
+            if st.button("تسجيل خروج"):
+                st.session_state.logged_student = None
+                st.rerun()
+        with col_nav1:
+            if st.button("🔄 تحديث حالة البث فوراً"):
+                st.rerun()
 
         st.divider()
         
-        # فحص البث المباشر الخاص بمادة الطالب فقط
+        # فحص البث المباشر الخاص بمادة الطالب فقط فورياً
         is_live, room_id = check_course_live(student_course)
 
         if is_live:
@@ -241,7 +255,7 @@ else:
     if admin_pass == st.secrets.get("ADMIN_PASSWORD", "2010"):
         st.success("أهلاً بك يا مطور المنصة 👋")
         
-        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جدول المواعيد والبث", "🎙️ التحكم بالبث المباشر لكل مادة", "📊 التقييمات"])
+        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جدول المواعيد والبث", "🎙️ التحكم بالبث المباشر للمواد", "📊 التقييمات"])
 
         # Tab 1: الأكواد
         with t1:
@@ -253,7 +267,7 @@ else:
                 with col2:
                     new_name = st.text_input("اسم الطالب الرباعي:")
                 with col3:
-                    new_course = st.text_input("المادة/الكورس:", placeholder="مثال: المشمش / بايثون")
+                    new_course = st.selectbox("اختر المادة/الكورس:", AVAILABLE_COURSES)
                 
                 btn_save = st.form_submit_button("حفظ الكود 💾")
 
@@ -292,7 +306,7 @@ else:
             with st.form("add_sched_form"):
                 c1, c2 = st.columns(2)
                 with c1:
-                    sched_course = st.text_input("اسم المادة بالضبط:", placeholder="مثال: المشمش")
+                    sched_course = st.selectbox("حدد المادة:", AVAILABLE_COURSES)
                     sched_day = st.selectbox("اليوم:", ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"])
                 with c2:
                     sched_time = st.text_input("موعد الحصة:", placeholder="مثال: الساعة 8:00 مساءً")
@@ -324,36 +338,40 @@ else:
 
         # Tab 3: البث المباشر المخصص لكل مادة
         with t3:
-            st.subheader("🎙️ إدارة وتشغيل البث المباشر للمواد")
+            st.subheader("🎙️ إدارة وتشغيل البث المباشر الفوري للمواد")
             
-            target_course = st.text_input("حدد المادة المراد فتح البث لها:", value="المشمش")
-            room_code = st.text_input("رمز القاعة (Room ID):", value="nova_mishmish_room")
+            target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
+            
+            # توليد معرف غرفة تلقائي بناءً على المادة
+            clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
             
             is_active, _ = check_course_live(target_course)
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button(f"🚀 تشغيل البث لمادة ({target_course})"):
-                    set_course_live(target_course, True, room_code)
-                    st.success(f"تم فتح البث المباشر لمادة {target_course} بنجاح!")
+                if st.button(f"🚀 تشغيل البث فوراً لمادة: ({target_course})"):
+                    set_course_live(target_course, True, clean_room_id)
+                    st.success(f"تم فتح البث المباشر لمادة ({target_course}) بنجاح! سيظهر للطلاب المسجلين بها فوراً.")
                     st.rerun()
             
             with col_b2:
-                if st.button(f"🛑 إيقاف البث لمادة ({target_course})"):
-                    set_course_live(target_course, False, room_code)
-                    st.warning(f"تم إغلاق البث المباشر لمادة {target_course}.")
+                if st.button(f"🛑 إيقاف البث لمادة: ({target_course})"):
+                    set_course_live(target_course, False, clean_room_id)
+                    st.warning(f"تم إغلاق البث المباشر لمادة ({target_course}).")
                     st.rerun()
 
             st.divider()
             if is_active:
-                st.success(f"🔴 البث يعمل الآن لمادة ({target_course})")
-                dev_jitsi_url = f"https://meet.jit.si/{room_code}#userInfo.displayName=%22المطور_المحاضر%22"
+                st.success(f"🔴 البث يعمل الآن بشكل مباشر لمادة: ({target_course})")
+                dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#userInfo.displayName=%22المطور_المحاضر%22"
                 components.html(f"""
                     <iframe src="{dev_jitsi_url}" 
                             allow="camera; microphone; display-capture; autoplay; clipboard-write"
                             style="height: 550px; width: 100%; border: 0px; border-radius: 12px;">
                     </iframe>
                 """, height=570)
+            else:
+                st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course})")
 
         # Tab 4: التقييمات
         with t4:
