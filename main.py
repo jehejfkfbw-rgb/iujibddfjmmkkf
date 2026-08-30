@@ -17,6 +17,7 @@ st.markdown("""
     .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
     .direct-link-btn { display: block; width: 100%; background-color: #dc2626; color: white; padding: 14px; text-align: center; border-radius: 8px; font-weight: bold; font-size: 18px; text-decoration: none; margin-bottom: 15px; }
     .direct-link-btn:hover { background-color: #b91c1c; color: white; }
+    .chat-box { background-color: #1e293b; color: white; padding: 12px; border-radius: 8px; max-height: 300px; overflow-y: auto; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -28,7 +29,7 @@ AVAILABLE_COURSES = [
     "تطوير الألعاب (Godot & Pygame)"
 ]
 
-# خريطة لربط كل مادة بغرفة بث خاصة ومستقلة تماماً عن البقية
+# خريطة لربط كل مادة بغرفة بث مستقلة تماماً
 COURSE_ROOMS = {
     "لغة بايثون - تعلم البرمجة للمبتدئين": "nova_room_python_exclusive_2026",
     "أساسيات البرمجة للمبتدئين": "nova_room_basics_exclusive_2026",
@@ -39,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_separated_courses_v22.db"
+DB_NAME = "nova_strict_isolation_v25.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -67,6 +68,15 @@ def init_db():
                 day TEXT NOT NULL,
                 time_slot TEXT NOT NULL,
                 next_live_info TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS live_chat (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_name TEXT NOT NULL,
+                student_name TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         cursor.execute("""
@@ -132,6 +142,7 @@ def check_course_live(course_name):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
+        # فحص صارم للمادة المحددة فقط بالاسم بدقة
         cursor.execute("SELECT is_live, room_id FROM course_live WHERE course_name = ?", (course_name.strip(),))
         res = cursor.fetchone()
         if res and res[0] == 'true':
@@ -145,6 +156,19 @@ def set_course_live(course_name, is_live, room_id):
         cursor.execute("INSERT OR REPLACE INTO course_live (course_name, is_live, room_id) VALUES (?, ?, ?)",
                        (course_name.strip(), 'true' if is_live else 'false', room_id.strip()))
         conn.commit()
+
+def add_chat_message(course_name, student_name, message):
+    init_db()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO live_chat (course_name, student_name, message) VALUES (?, ?, ?)",
+                       (course_name.strip(), student_name.strip(), message.strip()))
+        conn.commit()
+
+def get_chat_messages(course_name):
+    init_db()
+    with sqlite3.connect(DB_NAME) as conn:
+        return pd.read_sql_query("SELECT student_name AS 'الطالب', message AS 'التعليق', created_at AS 'الوقت' FROM live_chat WHERE course_name = ? ORDER BY id DESC LIMIT 50", conn, params=(course_name.strip(),))
 
 def save_feedback(code, name, course, rating, message):
     init_db()
@@ -162,7 +186,7 @@ init_db()
 page = st.sidebar.radio("التنقل:", ["🔴 قاعة الطالب وبث المادة", "⚙️ لوحة تحكم المطور"])
 
 # ---------------------------------------------------------
-# واجهة الطالب (تعتمد كلياً على مادة الطالب المخصصة له)
+# واجهة الطالب
 # ---------------------------------------------------------
 if page == "🔴 قاعة الطالب وبث المادة":
     st.title("🌟 منصة نوفا التعليمية - بوابة الطالب")
@@ -199,18 +223,17 @@ if page == "🔴 قاعة الطالب وبث المادة":
                 st.session_state.logged_student = None
                 st.rerun()
         with col_nav1:
-            if st.button("🔄 تحديث حالة البث فوراً"):
+            if st.button("🔄 تحديث الصفحة والبث فوراً"):
                 st.rerun()
 
         st.divider()
         
-        # فحص البث الخاص بهذه المادة وحدها
+        # فحص حالة البث الخاص بالمادة الحالية فقط بدقة تامة
         is_live, room_id = check_course_live(student_course)
 
         if is_live:
-            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك الخاصة: ({student_course})</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
             
-            # جلب الغرفة الخاصة بالمادة حصرياً
             specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
             student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay&codec=vp8&clean"
             
@@ -220,14 +243,35 @@ if page == "🔴 قاعة الطالب وبث المادة":
                 </a>
             """, unsafe_allow_html=True)
             
-            st.info("📌 المشغل أدناه يعرض البث المباشر الخاص بمادتك داخل الصفحة:")
-
-            components.html(f"""
-                <iframe src="{student_view_url}" 
-                        allow="autoplay; fullscreen; microphone; speaker; display-capture"
-                        style="height: 550px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
-                </iframe>
-            """, height=570)
+            col_v1, col_v2 = st.columns([2, 1])
+            with col_v1:
+                st.info("📌 مشغل الفيديو المباشر للمادة داخل الصفحة:")
+                components.html(f"""
+                    <iframe src="{student_view_url}" 
+                            allow="autoplay; fullscreen; microphone; speaker; display-capture"
+                            style="height: 480px; width: 100%; border: 0px; border-radius: 12px; background: #000;">
+                    </iframe>
+                """, height=500)
+            
+            with col_v2:
+                st.subheader("💬 شات التعليقات والأسئلة")
+                chat_msg = st.text_input("اكتب سؤالك للأستاذ:", key="chat_input_val")
+                if st.button("إرسال التعليق 📤"):
+                    if chat_msg.strip():
+                        add_chat_message(student_course, stu['student_name'], chat_msg)
+                        st.success("تم إرسال تعليقك للأستاذ!")
+                        st.rerun()
+                    else:
+                        st.warning("اكتب تعليقاً أولاً.")
+                
+                st.markdown("---")
+                st.write("📜 **التعليقات الواردة للبث:**")
+                df_chat = get_chat_messages(student_course)
+                if df_chat.empty:
+                    st.info("لا توجد تعليقات حتى الآن.")
+                else:
+                    for _, crow in df_chat.iterrows():
+                        st.markdown(f"💬 **{crow['الطالب']}**: {crow['التعليق']}")
             
             st.divider()
             c1, c2 = st.columns(2)
@@ -235,16 +279,16 @@ if page == "🔴 قاعة الطالب وبث المادة":
                 st.subheader("⭐ تقييم المحاضرة")
                 rating = st.slider("نسبة التقييم (%):", 0, 100, 95, step=5)
             with c2:
-                st.subheader("💬 إرسال استفسار للمطور")
-                msg = st.text_area("اكتب رسالتك أو سؤالك هنا:")
-                if st.button("إرسال الاستفسار 📤"):
+                st.subheader("💬 إرسال رسالة خاصة للمطور")
+                msg = st.text_area("اكتب رسالتك هنا:")
+                if st.button("إرسال للمطور 📤"):
                     if msg.strip():
                         save_feedback(stu['student_code'], stu['student_name'], student_course, rating, msg)
-                        st.success("تم إرسال رسالتك بنجاح للمطور!")
+                        st.success("تم إرسال رسالتك بنجاح!")
                     else:
-                        st.warning("يرجى كتابة الرسالة أولاً.")
+                        st.warning("يرجى كتابة الرسالة.")
         else:
-            # لو البث مش شغال، تظهر رسالة التوقف + جدول المواعيد الخاص بالمادة وحدها
+            # لو البث مش شغال للمادة دي، تظهر رسالة التوقف + جدول المواعيد المستقل للمادة وحدها
             st.warning(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}). تابع الجدول أدناه لمعرفة موعد المحاضرة القادمة.")
             
             st.subheader(f"📅 جدول مواعيد الحصص والبث القادم لمادتك فقط: ({student_course})")
@@ -255,7 +299,7 @@ if page == "🔴 قاعة الطالب وبث المادة":
                 st.dataframe(df_sch, use_container_width=True)
 
 # ---------------------------------------------------------
-# واجهة المطور (التحكم المنفصل لكل مادة)
+# واجهة المطور
 # ---------------------------------------------------------
 else:
     st.title("⚙️ لوحة إدارة منصة نوفا (المطور)")
@@ -264,7 +308,7 @@ else:
     if admin_pass == st.secrets.get("ADMIN_PASSWORD", "2010"):
         st.success("أهلاً بك يا مطور المنصة الفريد 👋")
         
-        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جداول المواعيد المستقلة", "🎙️ التحكم ببث كل مادة على حدة", "📊 رسائل الطلاب"])
+        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جداول المواعيد المستقلة", "🎙️ التحكم ببث كل مادة على حدة", "📊 تعليقات ورسائل الطلاب"])
 
         with t1:
             st.subheader("➕ إضافة كود طالب جديد وتخصيص مادته الأساسية")
@@ -344,7 +388,7 @@ else:
                                 st.rerun()
 
         with t3:
-            st.subheader("🎙️ التحكم المستقل ببث كل مادة على حدة")
+            st.subheader("🎙️ التحكم المستقل تماماً ببث كل مادة على حدة")
             
             target_course = st.selectbox("اختر المادة المراد إدارة بثها الآن:", AVAILABLE_COURSES, key="live_target")
             specific_room = COURSE_ROOMS.get(target_course, "nova_default_room_2026")
@@ -353,9 +397,9 @@ else:
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button(f"🚀 فتح بث هذه المادة فقط: ({target_course})"):
+                if st.button(f"🚀 فتح بث هذه المادة حصرياً: ({target_course})"):
                     set_course_live(target_course, True, specific_room)
-                    st.success(f"تم فتح البث الحصري لمادة ({target_course}) بنجاح!")
+                    st.success(f"تم فتح البث الحصري لمادة ({target_course}) وحدها بنجاح!")
                     st.rerun()
             
             with col_b2:
@@ -380,11 +424,19 @@ else:
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
                             allow="camera; microphone; display-capture; autoplay"
-                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #111;">
+                            style="height: 550px; width: 100%; border: 0px; border-radius: 12px; background: #111;">
                     </iframe>
-                """, height=620)
+                """, height=570)
+                
+                st.subheader(f"💬 تعليقات طلاب مادة ({target_course}) الحية للأستاذ:")
+                df_live_chats = get_chat_messages(target_course)
+                if df_live_chats.empty:
+                    st.info("لم يرسل أي طالب تعليقاً بعد.")
+                else:
+                    for _, lcr in df_live_chats.iterrows():
+                        st.markdown(f"👤 **{lcr['الطالب']}**: {lcr['التعليق']} ⏱️ *({lcr['الوقت']})*")
             else:
-                st.info(f"⚪ البث مغلق حالياً لمادة: ({target_course}). الطلاب يرون رسالة عدم وجود بث وجدول الحصخاص بهذه المادة فقط.")
+                st.info(f"⚪ البث مغلق تماماً لمادة: ({target_course}). ولن يظهر لطلابها أي بث.")
 
         with t4:
             st.subheader("📊 رسائل واستفسارات الطلاب الواردة")
