@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v27.db"
+DB_NAME = "nova_strict_isolation_v29.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -235,7 +235,7 @@ if page == "🔴 قاعة الطالب وبث المادة":
             
             specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
             
-            # رابط المشاهدة للطالب مع إعدادات الجودة القصوى (HD, Maximum Bitrate, VP9/VP8, High Quality)
+            # رابط المشاهدة بجودة فائقة ونظام يوتيوب القياسي
             student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp9&bitrate=5000&maxbitrate=8000&quality=0&clean"
             
             st.markdown(f"""
@@ -246,12 +246,13 @@ if page == "🔴 قاعة الطالب وبث المادة":
             
             col_v1, col_v2 = st.columns([2, 1])
             with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة (بأعلى جودة فائقة النقاء 1080p/HD):")
-                # مشغل متجاوب بعرض 16:9 يحاكي يوتيوب تماماً وبدون أي هوامش طولية
+                st.info("📌 مشغل الفيديو المباشر للمادة (تصميم يوتيوب أفقي 16:9 مع زر توسيع الشاشة):")
+                # قالب مسطح يحاكي مقاسات يوتيوب العرضية تماماً مع دعم التوسيع الكامل (Fullscreen)
                 components.html(f"""
-                    <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden;">
+                    <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                         <iframe src="{student_view_url}" 
                                 allow="autoplay; fullscreen; microphone; speaker; display-capture"
+                                allowfullscreen="true"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;">
                         </iframe>
                     </div>
@@ -417,7 +418,6 @@ else:
                 
                 source_type = st.radio("اختر وسيلة الإرسال:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب"])
                 
-                # روابط الإرسال للمطور مع أعلى دقة (1080p, 60fps, Max Bitrate لتجنب أي ضبابية في الشاشة أو الكاميرا)
                 if "شاشة" in source_type:
                     dev_push_url = f"https://vdo.ninja/?push={specific_room}&screenshare&quality=0&bitrate=5000&maxbitrate=8000&codec=vp9&autostart"
                 else:
