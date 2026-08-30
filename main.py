@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v25.db"
+DB_NAME = "nova_strict_isolation_v26.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -234,24 +234,27 @@ if page == "🔴 قاعة الطالب وبث المادة":
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
             
             specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
-            # رابط البث مع تفعيل العرض الكامل (cover) وجودة 720p مستقرة (quality=1)
-            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay&codec=vp8&quality=1&clean&cover"
+            # رابط البث بنظام شبيه بيوتيوب: جودة عالية مفتوحة (quality=0) وتنسيق أفقي بالكامل بدون قص
+            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp8&quality=0&clean"
             
             st.markdown(f"""
                 <a href="{student_view_url}" target="_blank" class="direct-link-btn">
-                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة وبأعلى جودة)
+                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة يوتيوب-ستايل وأعلى جودة)
                 </a>
             """, unsafe_allow_html=True)
             
             col_v1, col_v2 = st.columns([2, 1])
             with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة داخل الصفحة (عرض كامل 720p):")
+                st.info("📌 مشغل الفيديو المباشر للمادة (بعرض الشاشة بالكامل وبجودة يوتيوب):")
+                # تم ضبط الـ iframe ليحاكي مقاسات يوتيوب الأفقية 16:9 وبدون هوامش طولية
                 components.html(f"""
-                    <iframe src="{student_view_url}" 
-                            allow="autoplay; fullscreen; microphone; speaker; display-capture"
-                            style="height: 600px; width: 100%; border: 0px; border-radius: 12px; background: #000; object-fit: cover;">
-                    </iframe>
-                """, height=620)
+                    <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden;">
+                        <iframe src="{student_view_url}" 
+                                allow="autoplay; fullscreen; microphone; speaker; display-capture"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;">
+                        </iframe>
+                    </div>
+                """, height=520)
             
             with col_v2:
                 st.subheader("💬 شات التعليقات والأسئلة")
@@ -423,9 +426,9 @@ else:
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
                             allow="camera; microphone; display-capture; autoplay"
-                            style="height: 550px; width: 100%; border: 0px; border-radius: 12px; background: #111;">
+                            style="height: 500px; width: 100%; border: 0px; border-radius: 12px; background: #111;">
                     </iframe>
-                """, height=570)
+                """, height=520)
                 
                 st.subheader(f"💬 تعليقات طلاب مادة ({target_course}) الحية للأستاذ:")
                 df_live_chats = get_chat_messages(target_course)
