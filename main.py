@@ -15,7 +15,6 @@ st.markdown("""
     .stButton>button { width: 100%; font-weight: bold; border-radius: 8px; background-color: #2e7d32; color: white; height: 42px; }
     .profile-card { background-color: #0f172a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
     .live-active { background-color: #15803d; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; font-size: 18px; }
-    .btn-external { display: inline-block; background-color: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 15px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -30,7 +29,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v9_live.db"
+DB_NAME = "nova_v10_direct_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -203,15 +202,13 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
             display_name = stu['student_name'].replace(" ", "_")
             jitsi_url = f"https://meet.jit.si/{room_id}#userInfo.displayName=%22{display_name}%22"
             
-            st.markdown(f'<a href="{jitsi_url}" target="_blank" class="btn-external">🖥️ فتح القاعة في نافذة خارجية بدقة عالية</a>', unsafe_allow_html=True)
-            
             components.html(f"""
                 <iframe src="{jitsi_url}" 
                         allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
                         allowfullscreen="true"
-                        style="height: 650px; width: 100%; border: 0px; border-radius: 12px;">
+                        style="height: 600px; width: 100%; border: 0px; border-radius: 12px;">
                 </iframe>
-            """, height=670)
+            """, height=620)
             
             st.divider()
             c1, c2 = st.columns(2)
@@ -327,7 +324,7 @@ else:
                                 st.rerun()
 
         with t3:
-            st.subheader("🎙️ إدارة البث المباشر ومشاركة الشاشة/الكاميرا")
+            st.subheader("🎙️ إدارة البث المباشر (الكاميرا وشاشة اللابتوب)")
             
             target_course = st.selectbox("اختر المادة المراد فتح البث لها الآن:", AVAILABLE_COURSES)
             clean_room_id = "nova_room_" + "".join([c for c in target_course if c.isalnum()])
@@ -351,17 +348,14 @@ else:
             if is_active:
                 st.success(f"🔴 البث يعمل الآن بشكل مباشر لمادة: ({target_course})")
                 
-                # اختيار نمط بدء البث
-                stream_mode = st.radio("اختر نمط بدء البث المباشر من اللابتوب:", ["🖥️ مشاركة شاشة اللابتوب (Desktop Screen Share)", "📷 كاميرا اللابتوب (Laptop Camera)"])
+                # خيار مباشر بين الشاشة والكاميرا
+                choice = st.radio("اختر مصدر البث في الواجهة:", ["🖥️ مشاركة شاشة اللابتوب", "📷 كاميرا اللابتوب المباشرة"])
                 
-                # إعداد رابط البث مع الوسوم البرمجية لبدء مشاركة الشاشة فوراً
-                if "مشاركة شاشة" in stream_mode:
+                if "مشاركة شاشة" in choice:
                     dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#config.startScreenSharing=true&userInfo.displayName=%22المطور_المحاضر%22"
                 else:
                     dev_jitsi_url = f"https://meet.jit.si/{clean_room_id}#config.startWithVideoMuted=false&userInfo.displayName=%22المطور_المحاضر%22"
 
-                st.markdown(f'<a href="{dev_jitsi_url}" target="_blank" class="btn-external">💻 فتح غرفة البث في نافذة مستقلة (موصى به لبث ممتاز بدون قيود)</a>', unsafe_allow_html=True)
-                
                 components.html(f"""
                     <iframe src="{dev_jitsi_url}" 
                             allow="camera *; microphone *; display-capture *; autoplay *; clipboard-write *; fullscreen *"
