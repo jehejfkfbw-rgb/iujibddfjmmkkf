@@ -1,11 +1,11 @@
-from datetime import date, timedelta
+from datetime import date
 import sqlite3
 import pandas as pd
 import requests
 import streamlit as st
 
 # =========================================================
-# 1. إدارة قاعدة البيانات (Database Manager)
+# 1. إدارة قاعدة البيانات المُحدثة (Database Manager)
 # =========================================================
 
 
@@ -22,140 +22,113 @@ class StudentDatabase:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # جدول الطلاب
+            # جدول حسابات/بيانات الطلاب
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS students (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     full_name TEXT NOT NULL,
-                    birth_date TEXT NOT NULL,
-                    age INTEGER NOT NULL,
                     phone TEXT NOT NULL UNIQUE,
-                    whatsapp TEXT,
                     email TEXT,
                     governorate TEXT,
-                    education_stage TEXT,
-                    school_grade TEXT,
-                    programming_level TEXT,
-                    studied_python TEXT,
-                    reason TEXT,
-                    parent_name TEXT,
-                    parent_phone TEXT,
-                    course_name TEXT,
-                    course_date TEXT,
-                    course_time TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
-            # جدول إعدادات النظام (البث المباشر)
+            # جدول الكورسات والمواعيد (يضيفها المطور)
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-            """)
-
-            # جدول جدول التدريب
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS schedule (
+                CREATE TABLE IF NOT EXISTS courses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
-                    day TEXT NOT NULL,
+                    instructor TEXT NOT NULL,
+                    days TEXT NOT NULL,
                     time_str TEXT NOT NULL,
-                    instructor TEXT NOT NULL
+                    live_url TEXT DEFAULT '',
+                    is_live_active TEXT DEFAULT 'false'
                 )
             """)
 
-            # تعيين القيم الافتراضية للبث لو غير موجودة
-            cursor.execute(
-                "INSERT OR IGNORE INTO settings (key, value) VALUES ('live_active', 'false')"
-            )
-            cursor.execute(
-                "INSERT OR IGNORE INTO settings (key, value) VALUES ('live_url', 'https://www.youtube.com/watch?v=5qap5aO4i9A')"
-            )
+            # جدول اشتراكات الطلاب في الكورسات
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS enrollments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_phone TEXT NOT NULL,
+                    course_id INTEGER NOT NULL,
+                    status TEXT DEFAULT 'active',
+                    UNIQUE(student_phone, course_id)
+                )
+            """)
 
             conn.commit()
 
-    def save_student(self, data):
+    # --- إدارة الكورسات ---
+    def add_course(self, title, instructor, days, time_str, live_url):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO courses (title, instructor, days, time_str, live_url) VALUES (?, ?, ?, ?, ?)",
+                (title, instructor, days, time_str, live_url),
+            )
+            conn.commit()
+
+    def get_all_courses(self):
+        with self.get_connection() as conn:
+            return pd.read_sql_query("SELECT * FROM courses", conn)
+
+    def update_course_live(self, course_id, live_url, is_active):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE courses SET live_url = ?, is_live_active = ? WHERE id = ?",
+                (live_url, "true" if is_active else "false", course_id),
+            )
+            conn.commit()
+
+    # --- إدارة الطلاب والاشتراكات ---
+    def register_student(self, name, phone, email, governorate):
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    """
-                    INSERT INTO students (
-                        full_name, birth_date, age, phone, whatsapp, email,
-                        governorate, education_stage, school_grade, programming_level,
-                        studied_python, reason, parent_name, parent_phone,
-                        course_name, course_date, course_time
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        data["full_name"],
-                        data["birth_date"],
-                        data["age"],
-                        data["phone"],
-                        data["whatsapp"],
-                        data["email"],
-                        data["governorate"],
-                        data["education_stage"],
-                        data["school_grade"],
-                        data["programming_level"],
-                        data["studied_python"],
-                        data["reason"],
-                        data["parent_name"],
-                        data["parent_phone"],
-                        data["course_name"],
-                        data["course_date"],
-                        data["course_time"],
-                    ),
+                    "INSERT INTO students (full_name, phone, email, governorate) VALUES (?, ?, ?, ?)",
+                    (name, phone, email, governorate),
                 )
                 conn.commit()
-                return True, cursor.lastrowid
+                return True
         except sqlite3.IntegrityError:
-            return False, "duplicate"
-        except Exception as e:
-            return False, str(e)
+            return True  # الحساب موجود مسبقاً
+        except Exception:
+            return False
 
-    def get_setting(self, key):
+    def enroll_student(self, phone, course_id):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO enrollments (student_phone, course_id) VALUES (?, ?)",
+                    (phone, course_id),
+                )
+                conn.commit()
+                return True, "تم الاشتراك في الكورس بنجاح!"
+        except sqlite3.IntegrityError:
+            return False, "أنت مشترك في هذا الكورس بالفعل."
+
+    def is_enrolled(self, phone, course_id):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT value FROM settings WHERE key = ?", (key,)
+                "SELECT id FROM enrollments WHERE student_phone = ? AND course_id = ?",
+                (phone, course_id),
             )
-            row = cursor.fetchone()
-            return row[0] if row else None
+            return cursor.fetchone() is not None
 
-    def update_setting(self, key, value):
+    def get_enrolled_courses(self, phone):
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value)
-            )
-            conn.commit()
-
-    def add_schedule_item(self, title, day, time_str, instructor):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO schedule (title, day, time_str, instructor) VALUES (?, ?, ?, ?)",
-                (title, day, time_str, instructor),
-            )
-            conn.commit()
-
-    def get_schedule(self):
-        with self.get_connection() as conn:
-            return pd.read_sql_query("SELECT * FROM schedule", conn)
-
-    def delete_schedule_item(self, item_id):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM schedule WHERE id = ?", (item_id,))
-            conn.commit()
-
-    def get_all_students(self):
-        with self.get_connection() as conn:
-            return pd.read_sql_query("SELECT * FROM students", conn)
+            query = """
+                SELECT c.* FROM courses c
+                JOIN enrollments e ON c.id = e.course_id
+                WHERE e.student_phone = ?
+            """
+            return pd.read_sql_query(query, conn, params=(phone,))
 
 
 # =========================================================
@@ -171,20 +144,18 @@ class WhatsAppNotifier:
 
     def send_message(self, message):
         if not self.phone or not self.apikey:
-            return False, "بيانات CallMeBot غير موجودة في Secrets"
-
+            return False
         url = "https://api.callmebot.com/whatsapp.php"
         params = {"phone": self.phone, "text": message, "apikey": self.apikey}
-
         try:
-            response = requests.get(url, params=params, timeout=20)
-            return response.ok, response.text
-        except Exception as e:
-            return False, str(e)
+            res = requests.get(url, params=params, timeout=10)
+            return res.ok
+        except Exception:
+            return False
 
 
 # =========================================================
-# 3. التطبيق الرئيسي ولوحة التحكم (Nova Platform)
+# 3. التطبيق الرئيسي (Nova Platform)
 # =========================================================
 
 
@@ -197,223 +168,148 @@ class NovaPlatformApp:
 
     def setup_page(self):
         st.set_page_config(
-            page_title="منصة نوفا التعليمية",
-            page_icon="🌟",
-            layout="centered",
-            initial_sidebar_state="expanded",
-        )
-        self.apply_styles()
-
-    def apply_styles(self):
-        st.markdown(
-            """
-        <style>
-        .stApp { direction: rtl; text-align: right; background: #f5f7fb; }
-        .block-container { max-width: 850px; padding: 20px 14px 50px; }
-        .nova-header { background: linear-gradient(135deg, #071d49, #12438f); color: white; padding: 28px 20px; border-radius: 24px; text-align: center; margin-bottom: 18px; }
-        .nova-logo { font-size: 38px; font-weight: 900; }
-        .nova-header h1 { font-size: 28px; margin: 8px 0; }
-        .course-card { background: white; border-radius: 22px; padding: 22px; margin-bottom: 18px; border: 1px solid #e7eaf0; }
-        .course-title { color: #09245c; font-size: 25px; font-weight: 900; margin-bottom: 12px; }
-        .section-title { color: #09245c; font-size: 21px; font-weight: 900; margin: 18px 0 12px; }
-        .success-box { background: #eafff1; border: 1px solid #8de0ae; border-radius: 20px; padding: 25px; text-align: center; color: #146b36; font-size: 18px; }
-        .footer { text-align: center; color: #777; margin-top: 30px; }
-        </style>
-        """,
-            unsafe_allow_html=True,
+            page_title="منصة نوفا التعليمية", page_icon="🌟", layout="centered"
         )
 
     def render_student_view(self):
-        st.markdown(
-            """
-        <div class="nova-header">
-            <div class="nova-logo">🌟 نوفا</div>
-            <h1>منصة نوفا التعليمية</h1>
-            <p>سجّل الآن وابدأ رحلتك في عالم البرمجة 🚀</p>
-        </div>
-        """,
-            unsafe_allow_html=True,
+        st.title("🌟 منصة نوفا التعليمية")
+
+        # 1. تسجيل دخول الطالب برقم الهاتف
+        st.subheader("🔑 تسجيل الدخول")
+        user_phone = st.text_input(
+            "أدخل رقم هاتفك للوصول لكورساتك والاشتراك:",
+            placeholder="010xxxxxxx",
         )
 
-        # قسم البث المباشر (إذا كان مفعلاً من المطور)
-        is_live = self.db.get_setting("live_active") == "true"
-        if is_live:
-            live_url = self.db.get_setting("live_url")
-            st.markdown(
-                '<div class="section-title">🔴 البث المباشر الحالي</div>',
-                unsafe_allow_html=True,
+        if not user_phone:
+            st.info(
+                "يرجى كتابة رقم الهاتف أولاً لرؤية الكورسات المتاحة والبث المباشر."
             )
-            st.video(live_url)
+            return
 
-        # عرض جدول التدريب
-        st.markdown(
-            '<div class="section-title">📅 جدول التدريبات المتاحة</div>',
-            unsafe_allow_html=True,
-        )
-        df_schedule = self.db.get_schedule()
-        if not df_schedule.empty:
-            st.dataframe(
-                df_schedule[["title", "day", "time_str", "instructor"]].rename(
-                    columns={
-                        "title": "الدورة",
-                        "day": "اليوم",
-                        "time_str": "الوقت",
-                        "instructor": "المحاضر",
-                    }
-                ),
-                use_container_width=True,
-            )
+        # 2. عرض الكورسات المتاحة للاشتراك
+        st.divider()
+        st.subheader("📚 الكورسات المتاحة")
+        courses_df = self.db.get_all_courses()
+
+        if courses_df.empty:
+            st.warning("لا توجد كورسات مضافة حالياً من المطور.")
         else:
-            st.info("لا يوجد مواعيد تدريب مضافة حالياً.")
+            for _, row in courses_df.iterrows():
+                with st.expander(f"📌 {row['title']} - المحاضر: {row['instructor']}"):
+                    st.write(f"📅 **الأيام:** {row['days']}")
+                    st.write(f"⏰ **الموعد:** {row['time_str']}")
 
-        # استمارة التسجيل
-        st.markdown(
-            '<div class="section-title">📝 استمارة التسجيل</div>',
-            unsafe_allow_html=True,
-        )
-        with st.form("student_form"):
-            full_name = st.text_input("الاسم بالكامل *")
-            birth_date = st.date_input(
-                "تاريخ الميلاد *", value=date(2010, 1, 1)
-            )
-            phone = st.text_input("رقم الهاتف *")
-            whatsapp = st.text_input("رقم الواتساب")
-            email = st.text_input("البريد الإلكتروني")
-            governorate = st.selectbox(
-                "المحافظة *", ["الدقهلية", "القاهرة", "الإسكندرية", "أخرى"]
-            )
-            education_stage = st.selectbox(
-                "المرحلة التعليمية *", ["إعدادي", "ثانوي", "جامعي", "أخرى"]
-            )
-            programming_level = st.selectbox(
-                "مستواك في البرمجة *",
-                [
-                    "مبتدئ تماماً",
-                    "لدي معرفة بسيطة",
-                    "سبق لي دراسة البرمجة",
-                ],
-            )
+                    is_subbed = self.db.is_enrolled(user_phone, row["id"])
 
-            agree = st.checkbox("أوافق على التسجيل")
-            submitted = st.form_submit_button("🚀 تسجيل الآن")
+                    if is_subbed:
+                        st.success("✅ أنت مشترك في هذا الكورس")
+                    else:
+                        if st.button(
+                            f"📝 الاشتراك في {row['title']}", key=f"sub_{row['id']}"
+                        ):
+                            # تسجيل بيانات أولية إن لم تكن موجودة
+                            self.db.register_student(
+                                "طالب", user_phone, "", "غير محدد"
+                            )
+                            ok, msg = self.db.enroll_student(
+                                user_phone, row["id"]
+                            )
+                            if ok:
+                                st.success(msg)
+                                self.notifier.send_message(
+                                    f"🎉 اشتراك جديد!\nالكورس: {row['title']}\nطالب: {user_phone}"
+                                )
+                                st.rerun()
+                            else:
+                                st.error(msg)
 
-            if submitted:
-                if not full_name or not phone or not agree:
-                    st.error("❌ يرجى ملء كافة البيانات المطلوبة.")
-                else:
-                    today = date.today()
-                    age = (
-                        today.year
-                        - birth_date.year
-                        - (
-                            (today.month, today.day)
-                            < (birth_date.month, birth_date.day)
-                        )
-                    )
-                    student_data = {
-                        "full_name": full_name,
-                        "birth_date": birth_date.strftime("%Y-%m-%d"),
-                        "age": age,
-                        "phone": phone,
-                        "whatsapp": whatsapp if whatsapp else phone,
-                        "email": email,
-                        "governorate": governorate,
-                        "education_stage": education_stage,
-                        "school_grade": "",
-                        "programming_level": programming_level,
-                        "studied_python": "نعم",
-                        "reason": "",
-                        "parent_name": "",
-                        "parent_phone": "",
-                        "course_name": "Python",
-                        "course_date": "",
-                        "course_time": "",
-                    }
-                    saved, res = self.db.save_student(student_data)
-                    if saved:
-                        st.success(f"🎉 تم التسجيل بنجاح! رقم التسجيل: {res}")
-                        self.notifier.send_message(
-                            f"🚨 طالب جديد: {full_name}\nرقم الهاتف: {phone}"
-                        )
-                    elif res == "duplicate":
-                        st.error("⚠️ الرقم مسجل مسبقاً.")
+        # 3. قسم البث المباشر للكورسات المشترك فيها فقط
+        st.divider()
+        st.subheader("🔴 البث المباشر للدروس")
+        my_courses = self.db.get_enrolled_courses(user_phone)
+
+        if my_courses.empty:
+            st.info("قم بالاشتراك في أحد الكورسات أعلاه للتمكن من مشاهدة البث المباشر.")
+        else:
+            has_live = False
+            for _, c in my_courses.iterrows():
+                if c["is_live_active"] == "true":
+                    has_live = True
+                    st.error(f"LIVE NOW: بث مباشر شغال كورس ({c['title']})")
+                    st.video(c["live_url"])
+
+            if not has_live:
+                st.info("لا يوجد بث مباشر شغال حالياً للكورسات المشترك بها.")
 
     def render_admin_dashboard(self):
         st.title("⚙️ لوحة تحكم المطور")
-
-        # كلمة السر لحماية اللوحة (تكون 2010 افتراضياً)
         password = st.text_input("أدخل كلمة سر المطور:", type="password")
         admin_pass = st.secrets.get("ADMIN_PASSWORD", "2010")
 
         if password != admin_pass:
-            st.warning("يرجى إدخال كلمة السر الصحيحة للوصول للوحة التحكم.")
+            st.warning("كلمة السر خاطئة.")
             return
 
-        st.success("تم تسجيل الدخول بنجاح كـ **مطور النظام**.")
-        tab1, tab2, tab3 = st.tabs(
-            ["🔴 البث المباشر", "📅 جدول التدريبات", "👥 الطلاب المسجلين"]
-        )
+        st.success("أهلاً بك يا مطور المنصة 👋")
+        tab1, tab2 = st.tabs(["➕ إضافة كورسات والتحكم بالبث", "👥 بيانات المشتركين"])
 
-        # 1. إعدادات البث المباشر
         with tab1:
-            st.subheader("التحكم في البث المباشر")
-            current_status = self.db.get_setting("live_active") == "true"
-            is_active = st.checkbox("تفعيل البث المباشر الآن", value=current_status)
-            live_url = st.text_input(
-                "رابط البث (YouTube/Twitch/Vimeo):",
-                value=self.db.get_setting("live_url"),
-            )
-
-            if st.button("حفظ إعدادات البث"):
-                self.db.update_setting(
-                    "live_active", "true" if is_active else "false"
-                )
-                self.db.update_setting("live_url", live_url)
-                st.success("تم تحديث حالة ورابط البث المباشر بنجاح!")
-
-        # 2. إعدادات الجدول
-        with tab2:
-            st.subheader("إضافة ميعاد تدريب جديد")
-            with st.form("add_schedule"):
-                title = st.text_input("اسم الكورس/التدريب")
-                day = st.text_input("اليوم (مثال: الخميس)")
-                time_str = st.text_input("الوقت (مثال: 5:00 مساءً)")
+            st.subheader("إضافة كورس جديد")
+            with st.form("add_c"):
+                title = st.text_input("اسم الكورس (مثل: كورس بايثون)")
                 instructor = st.text_input("اسم المحاضر")
-                if st.form_submit_button("إضافة للجدول"):
-                    self.db.add_schedule_item(title, day, time_str, instructor)
-                    st.success("تمت الإضافة بنجاح.")
+                days = st.text_input("الأيام (مثال: السبت والأربعاء)")
+                time_str = st.text_input("الوقت (مثال: 7:00 مساءً)")
+                live_url = st.text_input("رابط البث المباشر الافتراضي")
+                if st.form_submit_button("حفظ الكورس"):
+                    self.db.add_course(
+                        title, instructor, days, time_str, live_url
+                    )
+                    st.success("تم إضافة الكورس بنجاح.")
 
-            st.subheader("الجدول الحالي")
-            df_sch = self.db.get_schedule()
-            st.dataframe(df_sch, use_container_width=True)
+            st.divider()
+            st.subheader("التحكم في البث المباشر للكورسات")
+            df_c = self.db.get_all_courses()
+            for _, row in df_c.iterrows():
+                st.write(f"**{row['title']}** ({row['days']} - {row['time_str']})")
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    new_url = st.text_input(
+                        "رابط البث الحالي:",
+                        value=row["live_url"],
+                        key=f"url_{row['id']}",
+                    )
+                with col2:
+                    is_active = st.checkbox(
+                        "تفعيل البث",
+                        value=(row["is_live_active"] == "true"),
+                        key=f"act_{row['id']}",
+                    )
 
-            delete_id = st.number_input(
-                "أدخل المعرف (ID) لحذف العنصر:", step=1, value=0
-            )
-            if st.button("حذف ميعاد"):
-                self.db.delete_schedule_item(delete_id)
-                st.success("تم الحذف بنجاح.")
+                if st.button("تحديث البث", key=f"btn_{row['id']}"):
+                    self.db.update_course_live(row["id"], new_url, is_active)
+                    st.success("تم تحديث حالة البث!")
 
-        # 3. عرض الطلاب المسجلين
-        with tab3:
-            st.subheader("قائمة الطلاب المسجلين")
-            df_students = self.db.get_all_students()
-            st.dataframe(df_students, use_container_width=True)
+        with tab2:
+            st.subheader("بيانات الاشتراكات")
+            with self.db.get_connection() as conn:
+                df_en = pd.read_sql_query(
+                    """
+                    SELECT e.id, e.student_phone, c.title as course_name 
+                    FROM enrollments e 
+                    JOIN courses c ON e.course_id = c.id
+                """,
+                    conn,
+                )
+                st.dataframe(df_en, use_container_width=True)
 
     def run(self):
-        # القائمة الجانبية للتبديل بين واجهة المستخدم ولوحة المطور
-        st.sidebar.title("📌 القائمة")
-        page = st.sidebar.radio("انتقل إلى:", ["الواجهة الرئيسية", "لوحة المطور"])
-
-        if page == "الواجهة الرئيسية":
+        page = st.sidebar.radio("القائمة:", ["صفحة الطلاب", "لوحة المطور"])
+        if page == "صفحة الطلاب":
             self.render_student_view()
         else:
             self.render_admin_dashboard()
-
-        st.markdown(
-            '<div class="footer">🌟 منصة نوفا التعليمية</div>',
-            unsafe_allow_html=True,
-        )
 
 
 if __name__ == "__main__":
