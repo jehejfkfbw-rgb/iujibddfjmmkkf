@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v29.db"
+DB_NAME = "nova_strict_isolation_v30.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -233,9 +233,9 @@ if page == "🔴 قاعة الطالب وبث المادة":
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
             
-            specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
+            specific_room = COURSE_ROOMS.get(student_course, "nova_room_default")
             
-            # رابط المشاهدة بجودة فائقة ونظام يوتيوب القياسي
+            # رابط المشاهدة مع أعلى دقة (HD / 1080p) بدون أي ضغط يقلل الجودة
             student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp9&bitrate=5000&maxbitrate=8000&quality=0&clean"
             
             st.markdown(f"""
@@ -246,13 +246,15 @@ if page == "🔴 قاعة الطالب وبث المادة":
             
             col_v1, col_v2 = st.columns([2, 1])
             with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة (تصميم يوتيوب أفقي 16:9 مع زر توسيع الشاشة):")
-                # قالب مسطح يحاكي مقاسات يوتيوب العرضية تماماً مع دعم التوسيع الكامل (Fullscreen)
+                st.info("📌 مشغل الفيديو المباشر للمادة (يملا شاشة الموبايل بالكامل وبجودة يوتيوب الخارقة):")
+                # تم تعديل الـ iframe ليملأ الشاشة تماماً مع دعم التوسيع الشامل والملء التلقائي (Fullscreen API)
                 components.html(f"""
                     <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                         <iframe src="{student_view_url}" 
                                 allow="autoplay; fullscreen; microphone; speaker; display-capture"
                                 allowfullscreen="true"
+                                webkitallowfullscreen="true"
+                                mozallowfullscreen="true"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;">
                         </iframe>
                     </div>
@@ -395,7 +397,7 @@ else:
             st.subheader("🎙️ التحكم المستقل تماماً ببث كل مادة على حدة")
             
             target_course = st.selectbox("اختر المادة المراد إدارة بثها الآن:", AVAILABLE_COURSES, key="live_target")
-            specific_room = COURSE_ROOMS.get(target_course, "nova_default_room_2026")
+            specific_room = COURSE_ROOMS.get(target_course, "nova_room_default")
             
             is_active, _ = check_course_live(target_course)
             
