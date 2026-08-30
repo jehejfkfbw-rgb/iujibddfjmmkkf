@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v26.db"
+DB_NAME = "nova_strict_isolation_v27.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -234,19 +234,20 @@ if page == "🔴 قاعة الطالب وبث المادة":
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
             
             specific_room = COURSE_ROOMS.get(student_course, "nova_default_room_2026")
-            # رابط البث بنظام شبيه بيوتيوب: جودة عالية مفتوحة (quality=0) وتنسيق أفقي بالكامل بدون قص
-            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp8&quality=0&clean"
+            
+            # رابط المشاهدة للطالب مع إعدادات الجودة القصوى (HD, Maximum Bitrate, VP9/VP8, High Quality)
+            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp9&bitrate=5000&maxbitrate=8000&quality=0&clean"
             
             st.markdown(f"""
                 <a href="{student_view_url}" target="_blank" class="direct-link-btn">
-                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة يوتيوب-ستايل وأعلى جودة)
+                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة وبأعلى جودة HD فائقة)
                 </a>
             """, unsafe_allow_html=True)
             
             col_v1, col_v2 = st.columns([2, 1])
             with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة (بعرض الشاشة بالكامل وبجودة يوتيوب):")
-                # تم ضبط الـ iframe ليحاكي مقاسات يوتيوب الأفقية 16:9 وبدون هوامش طولية
+                st.info("📌 مشغل الفيديو المباشر للمادة (بأعلى جودة فائقة النقاء 1080p/HD):")
+                # مشغل متجاوب بعرض 16:9 يحاكي يوتيوب تماماً وبدون أي هوامش طولية
                 components.html(f"""
                     <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden;">
                         <iframe src="{student_view_url}" 
@@ -416,12 +417,13 @@ else:
                 
                 source_type = st.radio("اختر وسيلة الإرسال:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب"])
                 
+                # روابط الإرسال للمطور مع أعلى دقة (1080p, 60fps, Max Bitrate لتجنب أي ضبابية في الشاشة أو الكاميرا)
                 if "شاشة" in source_type:
-                    dev_push_url = f"https://vdo.ninja/?push={specific_room}&screenshare&quality=0&autostart"
+                    dev_push_url = f"https://vdo.ninja/?push={specific_room}&screenshare&quality=0&bitrate=5000&maxbitrate=8000&codec=vp9&autostart"
                 else:
-                    dev_push_url = f"https://vdo.ninja/?push={specific_room}&webcam&quality=0&autostart"
+                    dev_push_url = f"https://vdo.ninja/?push={specific_room}&webcam&quality=0&bitrate=4000&maxbitrate=6000&codec=vp9&autostart"
 
-                st.info("📌 اضغط على زر (Start) في المشغل أدناه لبث هذه المادة لطلابها فقط:")
+                st.info("📌 اضغط على زر (Start) في المشغل أدناه لبث هذه المادة لطلابها بجودة فائقة HD:")
 
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
