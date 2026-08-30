@@ -29,7 +29,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v16_perfect_live.db"
+DB_NAME = "nova_v18_perfect_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -199,9 +199,12 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         if is_live:
             st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
-            # رابط الاستقبال المباشر والصافي للطالب
-            student_view_url = f"https://vdo.ninja/?view={room_id}&autoplay&muted=0"
+            # تثبيت معرف الغرفة بشكل قياسي ومباشر للطالب تماماً مثل المطور
+            clean_room_id = "nova_room_" + "".join([c for c in student_course if c.isalnum()])
+            student_view_url = f"https://vdo.ninja/?view={clean_room_id}&autoplay&codec=vp8&enhance"
             
+            st.info("💡 **ملاحظة للطالب:** إذا ظهرت الشاشة سوداء في البداية، اضغط مرة واحدة داخل مربع الفيديو أو اضغط على أي مكان لتفعيل الصوت والصورة من المتصفح.")
+
             components.html(f"""
                 <iframe src="{student_view_url}" 
                         allow="autoplay; fullscreen; microphone; speaker; display-capture"
@@ -354,7 +357,7 @@ else:
                 else:
                     dev_push_url = f"https://vdo.ninja/?push={clean_room_id}&webcam&quality=0&autostart"
 
-                st.info("📌 **تعليمات للمطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
+                st.info("📌 **تعليمات المطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
 
                 components.html(f"""
                     <iframe src="{dev_push_url}" 
