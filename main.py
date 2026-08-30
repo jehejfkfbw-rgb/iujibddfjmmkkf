@@ -29,7 +29,7 @@ AVAILABLE_COURSES = [
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_v14_perfect_live.db"
+DB_NAME = "nova_v15_perfect_live.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -167,7 +167,6 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         if st.button("دخول القاعة 🚀"):
             stu = verify_student(input_code)
             if stu:
-                st.session_state.logged_session = stu
                 st.session_state.logged_student = stu
                 st.success("تم التحقق ودخول القاعة بنجاح!")
                 st.rerun()
@@ -198,9 +197,9 @@ if page == "🔴 القاعة والبث المباشر (للطالب)":
         is_live, room_id = check_course_live(student_course)
 
         if is_live:
-            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=ToolOutput := True)
+            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادة ({student_course})</div>", unsafe_allow_html=True)
             
-            # الرابط الاحترافي المخصص للاستقبال المباشر الصافي للطالب بدون أي قوائم خيارات
+            # رابط الاستقبال المباشر والصافي للطالب
             student_view_url = f"https://vdo.ninja/?view={room_id}&autoplay&muted=0"
             
             components.html(f"""
@@ -350,11 +349,10 @@ else:
                 
                 source_type = st.radio("اختر ماذا تريد أن تبث للطلاب من لابتوبك:", ["🖥️ بث شاشة اللابتوب (Screen Share)", "📷 بث كاميرا اللابتوب المباشرة"])
                 
-                # استخدام رابط الإرسال المباشر للمطور بدون أي شاشات ترحيب
                 if "شاشة" in source_type:
                     dev_push_url = f"https://vdo.ninja/?push={clean_room_id}&screenshare&quality=0&autostart"
                 else:
-                    dev_push_url = f"https://vdo.ninja/?push={clean_room_id}&webcam&quality=0&autostart"
+                    dev_push_url = f"https://v0.ninja/?push={clean_room_id}&webcam&quality=0&autostart" if False else f"https://vdo.ninja/?push={clean_room_id}&webcam&quality=0&autostart"
 
                 st.info("📌 **تعليمات للمطور:** اضغط على زر البدء داخل المشغل أدناه، وافق على إذن الكاميرا أو الشاشة، وسيظهر البث للطلاب مباشرة في قاعاتهم.")
 
@@ -370,5 +368,5 @@ else:
         with t4:
             st.subheader("📊 رسائل وتقييمات الطلاب")
             with sqlite3.connect(DB_NAME) as conn:
-                df_fb = pd.read_sql_query("SELECT student_code AS 'الكود', student_name AS 'الاسم', course_name AS 'المادة', rating AS 'التقييم %', message AS 'الرسالة', created_at AS 'التاريخ' FROM live_feedback ORDER BY id DESC", conn)
+                df_fb = pd.read_sql_query("SELECT student_code AS 'الكود', student_name AS 'الاسم', course_name AS 'المادة', rating AS 'التقييم %', message AS 'الرسالة', created_at AS 'التاريخ' FROM live_feedback ORDER BY idDESC", conn)
                 st.dataframe(df_fb, use_container_width=True)
