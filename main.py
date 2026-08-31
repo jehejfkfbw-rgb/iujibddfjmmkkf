@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v30.db"
+DB_NAME = "nova_strict_isolation_v31.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -87,6 +87,16 @@ def init_db():
                 course_name TEXT,
                 rating INTEGER,
                 message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS course_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_name TEXT NOT NULL,
+                video_title TEXT NOT NULL,
+                video_data BLOB NOT NULL,
+                file_name TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -177,6 +187,30 @@ def save_feedback(code, name, course, rating, message):
                        (code, name, course, rating, message))
         conn.commit()
 
+def save_course_video(course_name, video_title, video_file):
+    init_db()
+    bytes_data = video_file.read()
+    file_name = video_file.name
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO course_videos (course_name, video_title, video_data, file_name) VALUES (?, ?, ?, ?)",
+                       (course_name, video_title, bytes_data, file_name))
+        conn.commit()
+
+def get_course_videos(course_name):
+    init_db()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, video_title, video_data, file_name, created_at FROM course_videos WHERE course_name = ? ORDER BY id DESC", (course_name,))
+        return cursor.fetchall()
+
+def delete_course_video(video_id):
+    init_db()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM course_videos WHERE id = ?", (video_id,))
+        conn.commit()
+
 # =========================================================
 # 3. الواجهات الرئيسية
 # =========================================================
@@ -222,87 +256,107 @@ if page == "🔴 قاعة الطالب وبث المادة":
                 st.session_state.logged_student = None
                 st.rerun()
         with col_nav1:
-            if st.button("🔄 تحديث الصفحة والبث فوراً"):
+            if st.button("🔄 تحديث الصفحة وبث المادة فوراً"):
                 st.rerun()
 
         st.divider()
         
-        # فحص حالة البث الخاص بالمادة الحالية فقط بدقة تامة
-        is_live, room_id = check_course_live(student_course)
+        # التبويبات الخاصة بالطالب (البث المباشر vs الفيديوهات المسجلة والجدول)
+        tab_live_s, tab_vids_s = st.tabs(["🔴 البث المباشر وغرفة الحصة", "📼 مكتبة الفيديوهات المسجلة والمراجعات"])
 
-        if is_live:
-            st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
-            
-            specific_room = COURSE_ROOMS.get(student_course, "nova_room_default")
-            
-            # رابط المشاهدة مع أعلى دقة (HD / 1080p) بدون أي ضغط يقلل الجودة
-            student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp9&bitrate=5000&maxbitrate=8000&quality=0&clean"
-            
-            st.markdown(f"""
-                <a href="{student_view_url}" target="_blank" class="direct-link-btn">
-                    🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة وبأعلى جودة HD فائقة)
-                </a>
-            """, unsafe_allow_html=True)
-            
-            col_v1, col_v2 = st.columns([2, 1])
-            with col_v1:
-                st.info("📌 مشغل الفيديو المباشر للمادة (يملا شاشة الموبايل بالكامل وبجودة يوتيوب الخارقة):")
-                # تم تعديل الـ iframe ليملأ الشاشة تماماً مع دعم التوسيع الشامل والملء التلقائي (Fullscreen API)
-                components.html(f"""
-                    <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                        <iframe src="{student_view_url}" 
-                                allow="autoplay; fullscreen; microphone; speaker; display-capture"
-                                allowfullscreen="true"
-                                webkitallowfullscreen="true"
-                                mozallowfullscreen="true"
-                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;">
-                        </iframe>
-                    </div>
-                """, height=520)
-            
-            with col_v2:
-                st.subheader("💬 شات التعليقات والأسئلة")
-                chat_msg = st.text_input("اكتب سؤالك للأستاذ:", key="chat_input_val")
-                if st.button("إرسال التعليق 📤"):
-                    if chat_msg.strip():
-                        add_chat_message(student_course, stu['student_name'], chat_msg)
-                        st.success("تم إرسال تعليقك للأستاذ!")
-                        st.rerun()
-                    else:
-                        st.warning("اكتب تعليقاً أولاً.")
+        with tab_live_s:
+            # فحص حالة البث الخاص بالمادة الحالية فقط بدقة تامة
+            is_live, room_id = check_course_live(student_course)
+
+            if is_live:
+                st.markdown(f"<div class='live-active'>🔴 البث المباشر شغال الآن لمادتك فقط: ({student_course})</div>", unsafe_allow_html=True)
                 
-                st.markdown("---")
-                st.write("📜 **التعليقات الواردة للبث:**")
-                df_chat = get_chat_messages(student_course)
-                if df_chat.empty:
-                    st.info("لا توجد تعليقات حتى الآن.")
-                else:
-                    for _, crow in df_chat.iterrows():
-                        st.markdown(f"💬 **{crow['الطالب']}**: {crow['التعليق']}")
-            
-            st.divider()
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("⭐ تقييم المحاضرة")
-                rating = st.slider("نسبة التقييم (%):", 0, 100, 95, step=5)
-            with c2:
-                st.subheader("💬 إرسال رسالة خاصة للمطور")
-                msg = st.text_area("اكتب رسالتك هنا:")
-                if st.button("إرسال للمطور 📤"):
-                    if msg.strip():
-                        save_feedback(stu['student_code'], stu['student_name'], student_course, rating, msg)
-                        st.success("تم إرسال رسالتك بنجاح!")
+                specific_room = COURSE_ROOMS.get(student_course, "nova_room_default")
+                student_view_url = f"https://vdo.ninja/?view={specific_room}&autoplay=1&codec=vp9&bitrate=5000&maxbitrate=8000&quality=0&clean&roomscale=1"
+                
+                st.markdown(f"""
+                    <a href="{student_view_url}" target="_blank" class="direct-link-btn">
+                        🚀 اضغط هنا لفتح البث المباشر (شاشة كاملة وبأعلى جودة HD فائقة)
+                    </a>
+                """, unsafe_allow_html=True)
+                
+                col_v1, col_v2 = st.columns([2, 1])
+                with col_v1:
+                    st.info("📌 مشغل الفيديو المباشر للمادة (يملا الشاشة تماماً بدون أي فراغات):")
+                    components.html(f"""
+                        <div style="position: relative; width: 100%; height: 600px; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                            <iframe src="{student_view_url}" 
+                                    allow="autoplay; fullscreen; microphone; speaker; display-capture"
+                                    allowfullscreen="true"
+                                    webkitallowfullscreen="true"
+                                    mozallowfullscreen="true"
+                                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; object-fit: cover;">
+                            </iframe>
+                        </div>
+                    """, height=620)
+                
+                with col_v2:
+                    st.subheader("💬 شات التعليقات والأسئلة")
+                    chat_msg = st.text_input("اكتب سؤالك للأستاذ:", key="chat_input_val")
+                    if st.button("إرسال التعليق 📤"):
+                        if chat_msg.strip():
+                            add_chat_message(student_course, stu['student_name'], chat_msg)
+                            st.success("تم إرسال تعليقك للأستاذ!")
+                            st.rerun()
+                        else:
+                            st.warning("اكتب تعليقاً أولاً.")
+                    
+                    st.markdown("---")
+                    st.write("📜 **التعليقات الواردة للبث:**")
+                    df_chat = get_chat_messages(student_course)
+                    if df_chat.empty:
+                        st.info("لا توجد تعليقات حتى الآن.")
                     else:
-                        st.warning("يرجى كتابة الرسالة.")
-        else:
-            st.warning(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}). تابع الجدول أدناه لمعرفة موعد المحاضرة القادمة.")
-            
-            st.subheader(f"📅 جدول مواعيد الحصص والبث القادم لمادتك فقط: ({student_course})")
-            df_sch = get_student_schedule(student_course)
-            if df_sch.empty:
-                st.info("لم يقم المطور بإضافة جدول مواعيد لهذه المادة حتى الآن.")
+                        for _, crow in df_chat.iterrows():
+                            st.markdown(f"💬 **{crow['الطالب']}**: {crow['التعليق']}")
+                
+                st.divider()
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.subheader("⭐ تقييم المحاضرة")
+                    rating = st.slider("نسبة التقييم (%):", 0, 100, 95, step=5)
+                with c2:
+                    st.subheader("💬 إرسال رسالة خاصة للمطور")
+                    msg = st.text_area("اكتب رسالتك هنا:")
+                    if st.button("إرسال للمطور 📤"):
+                        if msg.strip():
+                            save_feedback(stu['student_code'], stu['student_name'], student_course, rating, msg)
+                            st.success("تم إرسال رسالتك بنجاح!")
+                        else:
+                            st.warning("يرجى كتابة الرسالة.")
             else:
-                st.dataframe(df_sch, use_container_width=True)
+                st.warning(f"⌛ لا يوجد بث مباشر شغال حالياً لمادة ({student_course}). تابع الجدول أدناه لمعرفة موعد المحاضرة القادمة.")
+                
+                st.subheader(f"📅 جدول مواعيد الحصص والبث القادم لمادتك فقط: ({student_course})")
+                df_sch = get_student_schedule(student_course)
+                if df_sch.empty:
+                    st.info("لم يقم المطور بإضافة جدول مواعيد لهذه المادة حتى الآن.")
+                else:
+                    st.dataframe(df_sch, use_container_width=True)
+
+        with tab_vids_s:
+            st.subheader(f"📼 الفيديوهات والشروحات المسجلة الخاصة بمادتك: ({student_course})")
+            vids = get_course_videos(student_course)
+            if not vids:
+                st.info("لا توجد فيديوهات مسجلة مرفوعة لهذه المادة حتى الآن.")
+            else:
+                for v_id, v_title, v_data, f_name, c_at in vids:
+                    st.markdown(f"### 📌 {v_title}")
+                    st.text(f"تاريخ الرفع: {c_at}")
+                    st.video(v_data)
+                    st.download_button(
+                        label=f"📥 تحميل فيديو ({v_title}) على جهازك",
+                        data=v_data,
+                        file_name=f_name,
+                        mime="video/mp4",
+                        key=f"dl_vid_{v_id}"
+                    )
+                    st.divider()
 
 # ---------------------------------------------------------
 # واجهة المطور
@@ -314,7 +368,13 @@ else:
     if admin_pass == st.secrets.get("ADMIN_PASSWORD", "2010"):
         st.success("أهلاً بك يا مطور المنصة الفريد 👋")
         
-        t1, t2, t3, t4 = st.tabs(["🔑 إدارة الطلاب والأكواد", "📅 جداول المواعيد المستقلة", "🎙️ التحكم ببث كل مادة على حدة", "📊 تعليقات ورسائل الطلاب"])
+        t1, t2, t3, t4, t5 = st.tabs([
+            "🔑 إدارة الطلاب والأكواد", 
+            "📅 جداول المواعيد المستقلة", 
+            "🎙️ التحكم ببث كل مادة", 
+            "📼 رفع وإدارة فيديوهات الكورسات", 
+            "📊 تعليقات ورسائل الطلاب"
+        ])
 
         with t1:
             st.subheader("➕ إضافة كود طالب جديد وتخصيص مادته الأساسية")
@@ -445,6 +505,40 @@ else:
                 st.info(f"⚪ البث مغلق تماماً لمادة: ({target_course}). ولن يظهر لطلابها أي بث.")
 
         with t4:
+            st.subheader("📼 رفع فيديو جديد لكل كورس ليظهر لطلابه فقط وتتم حفظه في النظام")
+            with st.form("upload_vid_form"):
+                up_course = st.selectbox("اختر المادة المراد رفع الفيديو لها:", AVAILABLE_COURSES, key="up_vid_c")
+                up_title = st.text_input("عنوان الفيديو أو المحاضرة:", placeholder="مثال: المحاضرة الأولى: مقدمة بايثون")
+                up_file = st.file_uploader("اختر ملف الفيديو (MP4):", type=["mp4", "mov", "avi"])
+                btn_up_vid = st.form_submit_button("رفع وحفظ الفيديو في المنصة 🚀")
+
+            if btn_up_vid:
+                if up_course and up_title and up_file:
+                    save_course_video(up_course, up_title, up_file)
+                    st.success("تم رفع وحفظ الفيديو بنجاح، وأصبح متاحاً لطلاب المادة فوراً!")
+                    st.rerun()
+                else:
+                    st.error("يرجى اختيار المادة وكتابة العنوان وإرفاق ملف الفيديو.")
+
+            st.divider()
+            st.subheader("📋 الفيديوهات المرفوعة حالياً في المنصة")
+            for c in AVAILABLE_COURSES:
+                st.markdown(f"### 📚 مادة: {c}")
+                vids_list = get_course_videos(c)
+                if not vids_list:
+                    st.info("لا توجد فيديوهات مرفوعة لهذه المادة.")
+                else:
+                    for v_id, v_title, v_data, f_name, c_at in vids_list:
+                        col_v1, col_v2 = st.columns([4, 1])
+                        with col_v1:
+                            st.write(f"🎬 **{v_title}** | الملف: {f_name} | تاريخ الرفع: {c_at}")
+                        with col_v2:
+                            if st.button("حذف الفيديو 🗑️", key=f"del_v_{v_id}"):
+                                delete_course_video(v_id)
+                                st.success("تم حذف الفيديو.")
+                                st.rerun()
+
+        with t5:
             st.subheader("📊 رسائل واستفسارات الطلاب الواردة")
             with sqlite3.connect(DB_NAME) as conn:
                 df_fb = pd.read_sql_query("SELECT student_code AS 'الكود', student_name AS 'اسم الطالب', course_name AS 'المادة', rating AS 'التقييم %', message AS 'رسالة الطالب', created_at AS 'التاريخ' FROM live_feedback ORDER BY id DESC", conn)
