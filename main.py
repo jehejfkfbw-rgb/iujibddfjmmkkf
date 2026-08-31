@@ -40,7 +40,7 @@ COURSE_ROOMS = {
 # =========================================================
 # 2. إدارة قاعدة البيانات
 # =========================================================
-DB_NAME = "nova_strict_isolation_v31.db"
+DB_NAME = "nova_strict_isolation_v32.db"
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -95,8 +95,10 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 course_name TEXT NOT NULL,
                 video_title TEXT NOT NULL,
-                video_data BLOB NOT NULL,
-                file_name TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                video_data BLOB,
+                file_name TEXT,
+                youtube_url TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -187,21 +189,29 @@ def save_feedback(code, name, course, rating, message):
                        (code, name, course, rating, message))
         conn.commit()
 
-def save_course_video(course_name, video_title, video_file):
+def save_course_video_file(course_name, video_title, video_file):
     init_db()
     bytes_data = video_file.read()
     file_name = video_file.name
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO course_videos (course_name, video_title, video_data, file_name) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO course_videos (course_name, video_title, source_type, video_data, file_name) VALUES (?, ?, 'file', ?, ?)",
                        (course_name, video_title, bytes_data, file_name))
+        conn.commit()
+
+def save_course_video_youtube(course_name, video_title, youtube_url):
+    init_db()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO course_videos (course_name, video_title, source_type, youtube_url) VALUES (?, ?, 'youtube', ?)",
+                       (course_name, video_title, youtube_url))
         conn.commit()
 
 def get_course_videos(course_name):
     init_db()
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, video_title, video_data, file_name, created_at FROM course_videos WHERE course_name = ? ORDER BY id DESC", (course_name,))
+        cursor.execute("SELECT id, video_title, source_type, video_data, file_name, youtube_url, created_at FROM course_videos WHERE course_name = ? ORDER BY id DESC", (course_name,))
         return cursor.fetchall()
 
 def delete_course_video(video_id):
@@ -210,6 +220,15 @@ def delete_course_video(video_id):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM course_videos WHERE id = ?", (video_id,))
         conn.commit()
+
+def get_youtube_embed_url(url):
+    if "youtu.be/" in url:
+        vid_id = url.split("youtu.be/")[1].split("?")[0]
+        return f"https://www.youtube.com/embed/{vid_id}"
+    elif "watch?v=" in url:
+        vid_id = url.split("watch?v=")[1].split("&")[0]
+        return f"https://www.youtube.com/embed/{vid_id}"
+    return url
 
 # =========================================================
 # 3. الواجهات الرئيسية
@@ -261,11 +280,10 @@ if page == "🔴 قاعة الطالب وبث المادة":
 
         st.divider()
         
-        # التبويبات الخاصة بالطالب (البث المباشر vs الفيديوهات المسجلة والجدول)
-        tab_live_s, tab_vids_s = st.tabs(["🔴 البث المباشر وغرفة الحصة", "📼 مكتبة الفيديوهات المسجلة والمراجعات"])
+        # التبويبات الخاصة بالطالب
+        tab_live_s, tab_vids_s = st.tabs(["🔴 البث المباشر وغرفة الحصة", "📼 مكتبة الفيديوهات والشروحات المسجلة"])
 
         with tab_live_s:
-            # فحص حالة البث الخاص بالمادة الحالية فقط بدقة تامة
             is_live, room_id = check_course_live(student_course)
 
             if is_live:
@@ -345,17 +363,30 @@ if page == "🔴 قاعة الطالب وبث المادة":
             if not vids:
                 st.info("لا توجد فيديوهات مسجلة مرفوعة لهذه المادة حتى الآن.")
             else:
-                for v_id, v_title, v_data, f_name, c_at in vids:
+                for v_id, v_title, s_type, v_data, f_name, yt_url, c_at in vids:
                     st.markdown(f"### 📌 {v_title}")
-                    st.text(f"تاريخ الرفع: {c_at}")
-                    st.video(v_data)
-                    st.download_button(
-                        label=f"📥 تحميل فيديو ({v_title}) على جهازك",
-                        data=v_data,
-                        file_name=f_name,
-                        mime="video/mp4",
-                        key=f"dl_vid_{v_id}"
-                    )
+                    st.text(f"تاريخ الإضافة: {c_at}")
+                    
+                    if s_type == 'file':
+                        st.video(v_data)
+                        st.download_button(
+                            label=f"📥 تحميل فيديو ({v_title}) على جهازك",
+                            data=v_data,
+                            file_name=f_name,
+                            mime="video/mp4",
+                            key=f"dl_vid_{v_id}"
+                        )
+                    else:
+                        embed_link = get_youtube_embed_url(yt_url)
+                        components.html(f"""
+                            <div style="position: relative; width: 100%; padding-bottom: 56.25%; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                                <iframe src="{embed_link}" 
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                        allowfullscreen 
+                                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;">
+                                </iframe>
+                            </div>
+                        """, height=350)
                     st.divider()
 
 # ---------------------------------------------------------
@@ -372,7 +403,7 @@ else:
             "🔑 إدارة الطلاب والأكواد", 
             "📅 جداول المواعيد المستقلة", 
             "🎙️ التحكم ببث كل مادة", 
-            "📼 رفع وإدارة فيديوهات الكورسات", 
+            "📼 إضافة وإدارة فيديوهات الكورسات", 
             "📊 تعليقات ورسائل الطلاب"
         ])
 
@@ -497,7 +528,7 @@ else:
                 st.subheader(f"💬 تعليقات طلاب مادة ({target_course}) الحية للأستاذ:")
                 df_live_chats = get_chat_messages(target_course)
                 if df_live_chats.empty:
-                    st.info("لم يرسل أي طالب تعليقاً بعد.")
+                    st.info("لا توجد تعليقاًت حتى الآن.")
                 else:
                     for _, lcr in df_live_chats.iterrows():
                         st.markdown(f"👤 **{lcr['الطالب']}**: {lcr['التعليق']} ⏱️ *({lcr['الوقت']})*")
@@ -505,33 +536,46 @@ else:
                 st.info(f"⚪ البث مغلق تماماً لمادة: ({target_course}). ولن يظهر لطلابها أي بث.")
 
         with t4:
-            st.subheader("📼 رفع فيديو جديد لكل كورس ليظهر لطلابه فقط وتتم حفظه في النظام")
-            with st.form("upload_vid_form"):
-                up_course = st.selectbox("اختر المادة المراد رفع الفيديو لها:", AVAILABLE_COURSES, key="up_vid_c")
-                up_title = st.text_input("عنوان الفيديو أو المحاضرة:", placeholder="مثال: المحاضرة الأولى: مقدمة بايثون")
-                up_file = st.file_uploader("اختر ملف الفيديو (MP4):", type=["mp4", "mov", "avi"])
-                btn_up_vid = st.form_submit_button("رفع وحفظ الفيديو في المنصة 🚀")
+            st.subheader("📼 إضافة فيديو جديد (من جهاز التخزين أو رابط يوتيوب) لكل كورس")
+            
+            with st.form("upload_vid_form_v2"):
+                up_course = st.selectbox("اختر المادة المراد إضافة الفيديو لها:", AVAILABLE_COURSES, key="up_vid_c")
+                up_title = st.text_input("عنوان الفيديو أو المحاضرة:", placeholder="مثال: شرح الدوال في بايثون")
+                vid_method = st.radio("اختر طريقة إضافة الفيديو:", ["📁 رفع ملف فيديو من جهاز التخزين (MP4)", "🔗 إضافة رابط فيديو يوتيوب"])
+                
+                up_file = st.file_uploader("اختر ملف الفيديو:", type=["mp4", "mov", "avi"])
+                yt_link_input = st.text_input("رابط يوتيوب:", placeholder="مثال: https://www.youtube.com/watch?v=...")
+                
+                btn_up_vid = st.form_submit_button("حفظ الفيديو في المنصة 🚀")
 
             if btn_up_vid:
-                if up_course and up_title and up_file:
-                    save_course_video(up_course, up_title, up_file)
-                    st.success("تم رفع وحفظ الفيديو بنجاح، وأصبح متاحاً لطلاب المادة فوراً!")
-                    st.rerun()
+                if up_course and up_title:
+                    if "رفع ملف" in vid_method and up_file:
+                        save_course_video_file(up_course, up_title, up_file)
+                        st.success("تم رفع وحفظ الفيديو من التخزين بنجاح!")
+                        st.rerun()
+                    elif "يوتيوب" in vid_method and yt_link_input:
+                        save_course_video_youtube(up_course, up_title, yt_link_input)
+                        st.success("تم حفظ رابط اليوتيوب بنجاح!")
+                        st.rerun()
+                    else:
+                        st.error("يرجى إكمال تفاصيل الفيديو (رفع الملف أو كتابة الرابط بشكل صحيح).")
                 else:
-                    st.error("يرجى اختيار المادة وكتابة العنوان وإرفاق ملف الفيديو.")
+                    st.error("يرجى اختيار المادة وكتابة العنوان.")
 
             st.divider()
-            st.subheader("📋 الفيديوهات المرفوعة حالياً في المنصة")
+            st.subheader("📋 الفيديوهات المضافة حالياً في المنصة حسب المواد")
             for c in AVAILABLE_COURSES:
                 st.markdown(f"### 📚 مادة: {c}")
                 vids_list = get_course_videos(c)
                 if not vids_list:
-                    st.info("لا توجد فيديوهات مرفوعة لهذه المادة.")
+                    st.info("لا توجد فيديوهات مضافة لهذه المادة حتى الآن.")
                 else:
-                    for v_id, v_title, v_data, f_name, c_at in vids_list:
+                    for v_id, v_title, s_type, v_data, f_name, yt_url, c_at in vids_list:
                         col_v1, col_v2 = st.columns([4, 1])
                         with col_v1:
-                            st.write(f"🎬 **{v_title}** | الملف: {f_name} | تاريخ الرفع: {c_at}")
+                            method_desc = "📁 ملف مخزن" if s_type == 'file' else "🔗 يوتيوب"
+                            st.write(f"🎬 **{v_title}** [{method_desc}] | التاريخ: {c_at}")
                         with col_v2:
                             if st.button("حذف الفيديو 🗑️", key=f"del_v_{v_id}"):
                                 delete_course_video(v_id)
